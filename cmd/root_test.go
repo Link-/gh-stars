@@ -26,7 +26,7 @@ func NewTestClient(fn RoundTripFunc) *http.Client {
 }
 
 func TestGenerateCacheKey(t *testing.T) {
-	tests := map[string]struct {
+	tests := []struct {
 		name           string
 		url            string
 		wantUser       string
@@ -34,29 +34,7 @@ func TestGenerateCacheKey(t *testing.T) {
 		wantStatusCode int
 		wantCacheKey   string
 	}{
-		"success": {
-			name:     "Testing 200 response",
-			url:      "https://api.github.com/users/Link-/starred?page=1&per_page=1",
-			wantUser: "Link-",
-			wantHeader: map[string]string{
-				"Link": "<https://api.github.com/user/12345/starred?page=2&per_page=1>; rel=\"next\", <https://api.github.com/user/12345/starred?page=843&per_page=1>; rel=\"last\"",
-			},
-			wantStatusCode: 200,
-			wantCacheKey:   "2d06a89b2687745713ef0f025b8fff17873b870e7304300a982286816e471e6e",
-		},
-		"api_rate_limit_reached": {
-			name:     "Testing 403 response",
-			url:      "https://api.github.com/users/Link-/starred?page=1&per_page=1",
-			wantUser: "Link-",
-			wantHeader: map[string]string{
-				"X-RateLimit-Used":      "5000",
-				"X-RateLimit-Remaining": "0",
-				"X-RateLimit-Reset":     "1630000000",
-			},
-			wantStatusCode: 403,
-			wantCacheKey:   "",
-		},
-		"user_not_found": {
+		{
 			name:           "Testing 404 response",
 			url:            "https://api.github.com/users/Link-/starred?page=1&per_page=1",
 			wantUser:       "Link-",
@@ -64,60 +42,51 @@ func TestGenerateCacheKey(t *testing.T) {
 			wantStatusCode: 404,
 			wantCacheKey:   "",
 		},
+		{
+			name:           "Testing 403 response",
+			url:            "https://api.github.com/users/Link-/starred?page=1&per_page=1",
+			wantUser:       "Link-",
+			wantHeader:     map[string]string{"X-RateLimit-Used": "5000", "X-RateLimit-Remaining": "0", "X-RateLimit-Reset": "1630000000"},
+			wantStatusCode: 403,
+			wantCacheKey:   "",
+		},
+		{
+			name:           "Testing 200 response",
+			url:            "https://api.github.com/users/Link-/starred?page=1&per_page=1",
+			wantUser:       "Link-",
+			wantHeader:     map[string]string{"Link": "<https://api.github.com/user/12345/starred?page=2&per_page=1>; rel=\"next\", <https://api.github.com/user/12345/starred?page=843&per_page=1>; rel=\"last\""},
+			wantStatusCode: 200,
+			wantCacheKey:   "2d06a89b2687745713ef0f025b8fff17873b870e7304300a982286816e471e6e",
+		},
 	}
 
-	// Testing 200 response
-	mockClient := NewTestClient(func(req *http.Request) *http.Response {
-		assert.Equal(t, req.URL.String(), tests["success"].url)
-		response := http.Response{
-			StatusCode: tests["success"].wantStatusCode,
-			Body:       ioutil.NopCloser(bytes.NewBufferString(`OK`)),
-			Header:     make(http.Header),
-		}
-		for k, v := range tests["success"].wantHeader {
-			response.Header.Set(k, v)
-		}
-		return &response
-	})
-	got, err := GenerateCacheKey(tests["success"].wantUser, mockClient)
-	gotCacheKey := fmt.Sprintf("%x", got)
-	assert.NoError(t, err)
-	assert.Equal(t, tests["success"].wantCacheKey, gotCacheKey)
-
-	// Testing 403 response
-	mockClient = NewTestClient(func(req *http.Request) *http.Response {
-		assert.Equal(t, req.URL.String(), tests["api_rate_limit_reached"].url)
-		response := http.Response{
-			StatusCode: tests["api_rate_limit_reached"].wantStatusCode,
-			Body:       ioutil.NopCloser(bytes.NewBufferString(`OK`)),
-			Header:     make(http.Header),
-		}
-		for k, v := range tests["api_rate_limit_reached"].wantHeader {
-			response.Header.Set(k, v)
-		}
-		return &response
-	})
-	got, err = GenerateCacheKey(tests["api_rate_limit_reached"].wantUser, mockClient)
-	assert.Error(t, err)
-	assert.Equal(t, [32]byte{}, got)
-
-	// Testing 404 response
-	mockClient = NewTestClient(func(req *http.Request) *http.Response {
-		assert.Equal(t, req.URL.String(), tests["user_not_found"].url)
-		response := http.Response{
-			StatusCode: tests["user_not_found"].wantStatusCode,
-			Body:       ioutil.NopCloser(bytes.NewBufferString(`OK`)),
-			Header:     make(http.Header),
-		}
-		for k, v := range tests["user_not_found"].wantHeader {
-			response.Header.Set(k, v)
-		}
-		return &response
-	})
-	got, err = GenerateCacheKey(tests["user_not_found"].wantUser, mockClient)
-	assert.Error(t, err)
-	assert.Equal(t, [32]byte{}, got)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockClient := NewTestClient(func(req *http.Request) *http.Response {
+				assert.Equal(t, req.URL.String(), tt.url)
+				response := http.Response{
+					StatusCode: tt.wantStatusCode,
+					Body:       ioutil.NopCloser(bytes.NewBufferString(`OK`)),
+					Header:     make(http.Header),
+				}
+				for k, v := range tt.wantHeader {
+					response.Header.Set(k, v)
+				}
+				return &response
+			})
+			got, err := GenerateCacheKey(tt.wantUser, mockClient)
+			gotCacheKey := fmt.Sprintf("%x", got)
+			if err != nil {
+				assert.Error(t, err)
+				assert.Equal(t, [32]byte{}, got)
+			} else {
+				assert.NoError(t, err)
+				assert.Equal(t, tt.wantCacheKey, gotCacheKey)
+			}
+		})
+	}
 }
+
 
 // func TestGetStarredRepos(t *testing.T) {
 // 	// var parsedResponse []map[string]any

@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"fmt"
 	"io"
@@ -9,6 +10,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/cli/go-gh"
 	"github.com/spf13/cobra"
 )
 
@@ -22,6 +24,7 @@ var (
 	verbose     bool
 	version     bool
 	debug       bool
+	// TODO: replace with a logging library
 	InfoLogger  *log.Logger
 	ErrorLogger *log.Logger
 	client      *http.Client
@@ -66,16 +69,21 @@ var rootCmd = &cobra.Command{
 
 /**
  * Every API call to GitHub returns a header Link. This header contains
- * the URL to the next page of results.
+ * the URL to the next & last pages of results.
  * If we make a call to the API endpoint with 1 item per page, we will receive
  * a Link header with the total number of pages equal to the total number of items.
  * We can use this to generate a cache key that will be unique to the user and
  * the number of items they have starred.
  * When the user adds or removes an item, the cache key will change.
+ *
+ * Caveat:
+ * 	if the user has starred an item then unstarred another item, the cache key
+ * 	will not change! This is an acceptable tradeoff for the simplicity of the
+ * 	implementation.
  **/
 func GenerateCacheKey(user string, client *http.Client) ([32]byte, error) {
 	if user == "" {
-		return [32]byte{}, fmt.Errorf("user cannot be empty")
+		return [32]byte{}, fmt.Errorf("user cannot be empty, the implementation is faulty.")
 	}
 	resourceUrl := fmt.Sprintf("https://api.github.com/users/%v/starred?page=1&per_page=1", user)
 	req, err := http.NewRequest("GET", resourceUrl, nil)
@@ -101,30 +109,14 @@ func GenerateCacheKey(user string, client *http.Client) ([32]byte, error) {
 	return cacheKey, nil
 }
 
-func GetStarredRepos(user string) ([]byte, error) {
-	// TODO: add pagination support
-	// opts := api.ClientOptions{
-	// 	Host: "https://api.github.com",
-	// 	Headers: map[string]string{
-	// 		"Accept":               "application/vnd.github+json",
-	// 		"X-GitHub-Api-Version": "2022-11-28",
-	// 	},
-	// 	EnableCache: true,
-	// }
-	// client, err := gh.RESTClient(&opts)
-	// resourceUrl := fmt.Sprintf("users/%v/starred?page=1&per_page=1", user)
-	// resp, err := client.Request("GET", resourceUrl, nil)
-	// if err != nil {
-	// 	log.Fatal(err)
-	// }
-	// defer resp.Body.Close()
-	// headers, err := resp.Header.Get("X-Cache-Status")
-	// body, err := io.ReadAll(resp.Body)
-	// if err != nil {
-	// 	log.Fatal(err)
-	// }
-	// return body, nil
-	return nil, nil
+func GetStarredRepos(user string) (bytes.Buffer, error) {
+	args := []string{"api", fmt.Sprintf("users/%v/starred?page=1&per_page=1", user)}
+	stdOut, _, err := gh.Exec(args...)
+	if err != nil {
+		fmt.Println(err)
+		return *bytes.NewBuffer([]byte{}), err
+	}
+	return stdOut, nil
 }
 
 func init() {

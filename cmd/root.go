@@ -3,31 +3,32 @@ package cmd
 import (
 	"bytes"
 	"crypto/sha256"
+	"errors"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 
-	"github.com/cli/go-gh"
 	"github.com/spf13/cobra"
 )
 
 const VERSION = "0.1.0"
 
 var (
-	user        string
-	find        string
-	cacheDir    string
-	limit       int
-	verbose     bool
-	version     bool
-	debug       bool
+	user      string
+	find      string
+	cacheFile string
+	limit     int
+	verbose   bool
+	version   bool
+	debug     bool
 	// TODO: replace with a logging library
+	Client      *http.Client
 	InfoLogger  *log.Logger
 	ErrorLogger *log.Logger
-	client      *http.Client
 )
 
 var rootCmd = &cobra.Command{
@@ -45,7 +46,7 @@ var rootCmd = &cobra.Command{
 		InfoLogger = log.New(logWriter, "INFO: ", log.Ldate|log.Ltime|log.Lshortfile)
 		ErrorLogger = log.New(os.Stderr, "ERROR: ", log.Ldate|log.Ltime|log.Lshortfile)
 		// Initialize the HTTP client
-		client = &http.Client{}
+		Client = &http.Client{}
 	},
 	Run: func(cmd *cobra.Command, args []string) {
 		if version {
@@ -58,7 +59,7 @@ var rootCmd = &cobra.Command{
 			ErrorLogger.Fatal("The --user, -u and --find, -f flags are required. See --help for more information")
 		}
 		// The Link header is unique enough to generate a cache key
-		a, err := GenerateCacheKey(user, client)
+		a, err := GenerateCacheKey(user)
 		if err != nil {
 			ErrorLogger.Fatal("Not able to generate a cache key", err)
 		}
@@ -81,42 +82,77 @@ var rootCmd = &cobra.Command{
  * 	will not change! This is an acceptable tradeoff for the simplicity of the
  * 	implementation.
  **/
-func GenerateCacheKey(user string, client *http.Client) ([32]byte, error) {
+func GenerateCacheKey(user string) ([32]byte, error) {
 	if user == "" {
 		return [32]byte{}, fmt.Errorf("user cannot be empty, the implementation is faulty.")
 	}
-	resourceUrl := fmt.Sprintf("https://api.github.com/users/%v/starred?page=1&per_page=1", user)
-	req, err := http.NewRequest("GET", resourceUrl, nil)
+
+	InfoLogger.Println("Attempting to fetch the total number of starred repos for user", user)
+	url := fmt.Sprintf("https://api.github.com/users/%v/starred?page=1&per_page=1", user)
+	req, err := http.NewRequest(http.MethodGet, url, nil)
 	if err != nil {
 		return [32]byte{}, err
 	}
+
 	req.Header.Set("Accept", "application/vnd.github+json")
 	req.Header.Set("Cache-Control", "no-cache")
 	req.Header.Set("X-GitHub-Api-Version", "2022-11-28")
-	resp, err := client.Do(req)
+
+	resp, err := Client.Do(req)
 	if err != nil {
 		return [32]byte{}, err
 	}
-	switch resp.StatusCode {
-	case 403:
-		return [32]byte{}, fmt.Errorf("API rate limit reached. Used: %v, Remaining: %v, Reset Time: %v", resp.Header.Get("X-RateLimit-Used"), resp.Header.Get("X-RateLimit-Remaining"), resp.Header.Get("X-RateLimit-Reset"))
-	case 404:
-		return [32]byte{}, fmt.Errorf("User not found or you're not authorized to access this data.")
-	}
 	defer resp.Body.Close()
+
+	switch resp.StatusCode {
+	case http.StatusForbidden:
+		return [32]byte{}, fmt.Errorf("API rate limit reached. Used: %v, Remaining: %v, Reset Time: %v", resp.Header.Get("X-RateLimit-Used"), resp.Header.Get("X-RateLimit-Remaining"), resp.Header.Get("X-RateLimit-Reset"))
+	case http.StatusNotFound:
+		return [32]byte{}, fmt.Errorf("User not found or you're not authorized to access this data.")
+	case http.StatusOK:
+		break
+	default:
+		return [32]byte{}, fmt.Errorf("Unexpected HTTP status code: %d", resp.StatusCode)
+	}
+
 	header := resp.Header.Get("Link")
 	cacheKey := sha256.Sum256([]byte(header))
+	InfoLogger.Println("CacheKey generated:", fmt.Sprintf("%x", cacheKey))
 	return cacheKey, nil
 }
 
-func GetStarredRepos(user string) (bytes.Buffer, error) {
-	args := []string{"api", fmt.Sprintf("users/%v/starred?page=1&per_page=1", user)}
-	stdOut, _, err := gh.Exec(args...)
-	if err != nil {
-		fmt.Println(err)
-		return *bytes.NewBuffer([]byte{}), err
+func fileExists(filePath string) bool {
+	_, err := os.Stat(filePath)
+	return !errors.Is(err, os.ErrNotExist)
+}
+
+func GetStarredRepos(user string, cacheFile string, cacheKey [32]byte) (bytes.Buffer, error) {
+	// Check if the cache file exists
+	// If it does, check if the cache key is the same as the one we generated
+	// If it is, return the cached data
+	// If it isn't, make the API call and update the cache file
+	// If it doesn't, make the API call and create the cache file
+	cacheFileExists := fileExists(cacheFile)
+	if cacheFileExists {
+		// TODO: replace with a function that will read the content of the cache file
+		return bytes.Buffer{}, nil
 	}
-	return stdOut, nil
+
+	// Create a cachefile named: gh-stars/stars_1das3423.json
+	InfoLogger.Println("Cache file doesn't exist, creating a new one")
+	path := filepath.Join(os.TempDir(), fmt.Sprintf("stars_%x.json", cacheKey[:6]))
+	fmt.Println(path)
+	InfoLogger.Println("Cache file created: ", path)
+
+	return bytes.Buffer{}, nil
+
+	// args := []string{"api", fmt.Sprintf("users/%v/starred?page=1&per_page=1", user)}
+	// stdOut, _, err := gh.Exec(args...)
+	// if err != nil {
+	// 	fmt.Println(err)
+	// 	return *bytes.NewBuffer([]byte{}), err
+	// }
+	// return stdOut, nil
 }
 
 func init() {
@@ -139,7 +175,7 @@ func init() {
 	//     Enables debug mode
 	rootCmd.Flags().StringVarP(&user, "user", "u", "", "GitHub handle of the user you want to search their stars (required)")
 	rootCmd.Flags().StringVarP(&find, "find", "f", "", "The keyword you want to search for (required)")
-	rootCmd.Flags().StringVarP(&cacheDir, "cache-dir", "c", "/tmp/.starscache", "Directory you want to store the cache file in, default: /tmp/.starscache")
+	rootCmd.Flags().StringVarP(&cacheFile, "cache-file", "c", "", "File you want to store the cache file in. If not provided, the tool will generate one in $TMPDIR/.starscache")
 	rootCmd.Flags().IntVarP(&limit, "limit", "l", 10, "Limit the search results to the specified number, default: 10")
 	rootCmd.Flags().BoolVarP(&verbose, "verbose", "V", false, "Print activity log, default: false")
 	rootCmd.Flags().BoolVarP(&version, "version", "v", false, "Print current version")

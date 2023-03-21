@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"testing"
 
+	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -25,7 +26,13 @@ func NewTestClient(fn RoundTripFunc) *http.Client {
 	}
 }
 
+func setup(args []string) {
+	rootCmd.PreRun(&cobra.Command{}, args)
+}
+
 func TestGenerateCacheKey(t *testing.T) {
+	setup([]string{})
+
 	tests := []struct {
 		name           string
 		url            string
@@ -39,7 +46,7 @@ func TestGenerateCacheKey(t *testing.T) {
 			url:            "https://api.github.com/users/Link-/starred?page=1&per_page=1",
 			wantUser:       "Link-",
 			wantHeader:     map[string]string{},
-			wantStatusCode: 404,
+			wantStatusCode: http.StatusNotFound,
 			wantCacheKey:   "",
 		},
 		{
@@ -47,7 +54,7 @@ func TestGenerateCacheKey(t *testing.T) {
 			url:            "https://api.github.com/users/Link-/starred?page=1&per_page=1",
 			wantUser:       "Link-",
 			wantHeader:     map[string]string{"X-RateLimit-Used": "5000", "X-RateLimit-Remaining": "0", "X-RateLimit-Reset": "1630000000"},
-			wantStatusCode: 403,
+			wantStatusCode: http.StatusForbidden,
 			wantCacheKey:   "",
 		},
 		{
@@ -55,14 +62,15 @@ func TestGenerateCacheKey(t *testing.T) {
 			url:            "https://api.github.com/users/Link-/starred?page=1&per_page=1",
 			wantUser:       "Link-",
 			wantHeader:     map[string]string{"Link": "<https://api.github.com/user/12345/starred?page=2&per_page=1>; rel=\"next\", <https://api.github.com/user/12345/starred?page=843&per_page=1>; rel=\"last\""},
-			wantStatusCode: 200,
+			wantStatusCode: http.StatusOK,
 			wantCacheKey:   "2d06a89b2687745713ef0f025b8fff17873b870e7304300a982286816e471e6e",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			mockClient := NewTestClient(func(req *http.Request) *http.Response {
+			// Override the client with a mock client
+			Client = NewTestClient(func(req *http.Request) *http.Response {
 				assert.Equal(t, req.URL.String(), tt.url)
 				response := http.Response{
 					StatusCode: tt.wantStatusCode,
@@ -74,7 +82,7 @@ func TestGenerateCacheKey(t *testing.T) {
 				}
 				return &response
 			})
-			got, err := GenerateCacheKey(tt.wantUser, mockClient)
+			got, err := GenerateCacheKey(tt.wantUser)
 			gotCacheKey := fmt.Sprintf("%x", got)
 			if err != nil {
 				assert.Error(t, err)
@@ -87,14 +95,11 @@ func TestGenerateCacheKey(t *testing.T) {
 	}
 }
 
-
-// func TestGetStarredRepos(t *testing.T) {
-// 	// var parsedResponse []map[string]any
-// 	_, err := GetStarredRepos("Link-")
-// 	if err != nil {
-// 		t.Errorf("Failed to get starred repos for user Link-: %v", err)
-// 	}
-// 	// if err := json.Unmarshal(got.Bytes(), &parsedResponse); err != nil {
-// 	// 	fmt.Print(err)
-// 	// }
-// }
+func TestGetStarredRepos(t *testing.T) {
+	cacheKey := [32]byte{0x2d, 0x06, 0xa8, 0x9b, 0x26, 0x87, 0x74, 0x57, 0x13, 0xef, 0x0f, 0x02, 0x5b, 0x8f, 0xff, 0x17, 0x87, 0x3b, 0x87, 0x0e, 0x73, 0x04, 0x30, 0x0a, 0x98, 0x22, 0x86, 0x81, 0x6e, 0x47, 0x1e, 0x6e}
+	result, err := GetStarredRepos("Link-", "", cacheKey)
+	fmt.Println(result)
+	if err != nil {
+		t.Errorf("Failed to get starred repos for user Link-: %v", err)
+	}
+}

@@ -17,6 +17,16 @@ import (
 
 const VERSION = "0.1.0"
 
+type githubInterface interface {
+	Exec(args ...string) (bytes.Buffer, bytes.Buffer, error)
+}
+
+type github struct{}
+
+func (g *github) Exec(args ...string) (bytes.Buffer, bytes.Buffer, error) {
+	return gh.Exec(args...)
+}
+
 var (
 	user      string
 	find      string
@@ -25,8 +35,9 @@ var (
 	verbose   bool
 	version   bool
 	debug     bool
-	// TODO: replace with a logging library
-	Client      *http.Client
+
+	gh          githubInterface
+	client      *http.Client
 	InfoLogger  *log.Logger
 	ErrorLogger *log.Logger
 )
@@ -46,7 +57,9 @@ var rootCmd = &cobra.Command{
 		InfoLogger = log.New(logWriter, "INFO: ", log.Ldate|log.Ltime|log.Lshortfile)
 		ErrorLogger = log.New(os.Stderr, "ERROR: ", log.Ldate|log.Ltime|log.Lshortfile)
 		// Initialize the HTTP client
-		Client = &http.Client{}
+		client = &http.Client{}
+		// Initialize the GitHub client
+		gh = &github{}
 	},
 	Run: func(cmd *cobra.Command, args []string) {
 		if version {
@@ -68,20 +81,18 @@ var rootCmd = &cobra.Command{
 	},
 }
 
-/**
- * Every API call to GitHub returns a header Link. This header contains
- * the URL to the next & last pages of results.
- * If we make a call to the API endpoint with 1 item per page, we will receive
- * a Link header with the total number of pages equal to the total number of items.
- * We can use this to generate a cache key that will be unique to the user and
- * the number of items they have starred.
- * When the user adds or removes an item, the cache key will change.
- *
- * Caveat:
- * 	if the user has starred an item then unstarred another item, the cache key
- * 	will not change! This is an acceptable tradeoff for the simplicity of the
- * 	implementation.
- **/
+// Every API call to GitHub returns a header Link. This header contains
+// the URL to the next & last pages of results.
+// If we make a call to the API endpoint with 1 item per page, we will receive
+// a Link header with the total number of pages equal to the total number of items.
+// We can use this to generate a cache key that will be unique to the user and
+// the number of items they have starred. When the user adds or removes an item,
+// the cache key will change.
+//
+// Caveat:
+// if the user has starred an item then unstarred another item, the cache key
+// will not change! This is an acceptable tradeoff for the simplicity of the
+// implementation.
 func GenerateCacheKey(user string) ([32]byte, error) {
 	if user == "" {
 		return [32]byte{}, fmt.Errorf("user cannot be empty, the implementation is faulty.")
@@ -98,7 +109,7 @@ func GenerateCacheKey(user string) ([32]byte, error) {
 	req.Header.Set("Cache-Control", "no-cache")
 	req.Header.Set("X-GitHub-Api-Version", "2022-11-28")
 
-	resp, err := Client.Do(req)
+	resp, err := client.Do(req)
 	if err != nil {
 		return [32]byte{}, err
 	}
@@ -121,38 +132,110 @@ func GenerateCacheKey(user string) ([32]byte, error) {
 	return cacheKey, nil
 }
 
+// GetCachePath returns the path to the cache file to use for storing starred repos. If
+// the cache file path was not provided as input, it will create a new one.
+// The cache file created uses the first 6 bytes of the cache key to generate a unique
+// filename.
+//
+// Example: <tmpdir>/stars_2d06a89b2687.json
+func GetCachePath(cacheKey [32]byte) (string, error) {
+	// We check if cacheFile is provided as input by the user
+	if cacheFile != "" {
+		InfoLogger.Println("Cache file provided as input:", cacheFile)
+		return cacheFile, nil
+	}
+	if cacheKey == [32]byte{} {
+		return "", fmt.Errorf("cacheKey cannot be empty, the implementation is faulty.")
+	}
+	// cacheFile format: <tmpdir>/stars_2d06a89b2687.json
+	// each byte is 2 hex characters
+	path := filepath.Join(os.TempDir(), fmt.Sprintf("stars_%x.json", cacheKey[:6]))
+	if cacheFileExists := fileExists(path); !cacheFileExists {
+		InfoLogger.Println("Cache file doesn't exist, creating a new one at:", path)
+		file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE, 0644)
+		if err != nil {
+			return "", err
+		}
+		defer file.Close()
+	}
+	return path, nil
+}
+
+// GetStarredRepos returns the starred repos for the given user.
+// If the cache file exists and is not empty, it will read from the cache file.
+// If the cache file does not exist or is empty, it will make an API call to GitHub
+// to fetch the starred repos for the given user.
+func GetStarredRepos(user string, cacheKey [32]byte) (bytes.Buffer, error) {
+	path, err := GetCachePath(cacheKey)
+	if err != nil {
+		return bytes.Buffer{}, err
+	}
+
+	size, err := fileSize(path)
+	if err != nil {
+		return bytes.Buffer{}, err
+	}
+
+	// Read from cache file if it exists and is not empty
+	if size > 0 {
+		InfoLogger.Println("Cache file exists and is not empty, reading from the cache file:", path)
+		file, err := os.Open(path)
+		if err != nil {
+			return bytes.Buffer{}, err
+		}
+		defer file.Close()
+
+		var data bytes.Buffer
+		_, err = io.Copy(&data, file)
+		if err != nil {
+			return bytes.Buffer{}, err
+		}
+		return data, nil
+	}
+
+	InfoLogger.Println("Cache is empty. Fetching the starred repos for:", user)
+	args := []string{"api", fmt.Sprintf("users/%v/starred?page=1&per_page=1", user)}
+	stdOut, _, err := gh.Exec(args...)
+	if err != nil {
+		return bytes.Buffer{}, err
+	}
+
+	// Write stdOut to the cache file
+	InfoLogger.Println("Writing the fetched repos to cache.")
+	file, err := os.OpenFile(path, os.O_WRONLY|os.O_TRUNC, 0644)
+	if err != nil {
+		return bytes.Buffer{}, err
+	}
+	defer file.Close()
+
+	_, err = file.Write(stdOut.Bytes())
+	if err != nil {
+		return bytes.Buffer{}, err
+	}
+
+	return stdOut, nil
+}
+
+// Checks if a file exists at the given path
 func fileExists(filePath string) bool {
 	_, err := os.Stat(filePath)
 	return !errors.Is(err, os.ErrNotExist)
 }
 
-func GetStarredRepos(user string, cacheFile string, cacheKey [32]byte) (bytes.Buffer, error) {
-	// Check if the cache file exists
-	// If it does, check if the cache key is the same as the one we generated
-	// If it is, return the cached data
-	// If it isn't, make the API call and update the cache file
-	// If it doesn't, make the API call and create the cache file
-	cacheFileExists := fileExists(cacheFile)
-	if cacheFileExists {
-		// TODO: replace with a function that will read the content of the cache file
-		return bytes.Buffer{}, nil
+// Returns the size of the file at the given path.
+// Returns -1 if the file does not exist.
+func fileSize(filePath string) (int64, error) {
+	file, err := os.Open(filePath)
+	if err != nil {
+		return -1, err
 	}
+	defer file.Close()
 
-	// Create a cachefile named: gh-stars/stars_1das3423.json
-	InfoLogger.Println("Cache file doesn't exist, creating a new one")
-	path := filepath.Join(os.TempDir(), fmt.Sprintf("stars_%x.json", cacheKey[:6]))
-	fmt.Println(path)
-	InfoLogger.Println("Cache file created: ", path)
-
-	return bytes.Buffer{}, nil
-
-	// args := []string{"api", fmt.Sprintf("users/%v/starred?page=1&per_page=1", user)}
-	// stdOut, _, err := gh.Exec(args...)
-	// if err != nil {
-	// 	fmt.Println(err)
-	// 	return *bytes.NewBuffer([]byte{}), err
-	// }
-	// return stdOut, nil
+	stat, err := file.Stat()
+	if err != nil {
+		return -1, err
+	}
+	return stat.Size(), nil
 }
 
 func init() {

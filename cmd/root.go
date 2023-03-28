@@ -3,6 +3,7 @@ package cmd
 import (
 	"bytes"
 	"crypto/sha256"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -12,10 +13,25 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/lithammer/fuzzysearch/fuzzy"
 	"github.com/spf13/cobra"
 )
 
 const VERSION = "0.1.0"
+
+type Repo struct {
+	Name      string `json:"name"`
+	Full_name string `json:"full_name"`
+	Private   bool   `json:"private"`
+	Owner     struct {
+		Login string `json:"login"`
+		Url   string `json:"url"`
+	}
+	Description string   `json:"description"`
+	Fork        bool     `json:"fork"`
+	Stars       int      `json:"stargazers_count"`
+	Topics      []string `json:"topics"`
+}
 
 type githubInterface interface {
 	Exec(args ...string) (bytes.Buffer, bytes.Buffer, error)
@@ -72,13 +88,35 @@ var rootCmd = &cobra.Command{
 			ErrorLogger.Fatal("The --user, -u and --find, -f flags are required. See --help for more information")
 		}
 		// The Link header is unique enough to generate a cache key
-		a, err := GenerateCacheKey(user)
+		key, err := GenerateCacheKey(user)
 		if err != nil {
 			ErrorLogger.Fatal("Not able to generate a cache key", err)
 		}
-		fmt.Printf("%x", a)
-
+		starred, err := GetStarredRepos(user, key)
+		if err != nil {
+			ErrorLogger.Fatal("Not able to get starred repos", err)
+		}
+		found, err := Search(starred, find)
+		if err != nil {
+			ErrorLogger.Fatal("Not able to search starred repos", err)
+		}
+		fmt.Println(found)
 	},
+}
+
+func Search(starredRepos bytes.Buffer, find string) ([]Repo, error) {
+	var repos []Repo
+	err := json.Unmarshal(starredRepos.Bytes(), &repos)
+	if err != nil {
+		return nil, err
+	}
+	var found []Repo
+	for _, repo := range repos {
+		if fuzzy.RankMatchNormalizedFold(find, repo.Name) >= 0 || fuzzy.RankMatchNormalizedFold(find, repo.Description) >= 0 || len(fuzzy.Find(find, repo.Topics)) > 0 {
+			found = append(found, repo)
+		}
+	}
+	return found, nil
 }
 
 // Every API call to GitHub returns a header Link. This header contains
@@ -144,9 +182,11 @@ func GetCachePath(cacheKey [32]byte) (string, error) {
 		InfoLogger.Println("Cache file provided as input:", cacheFile)
 		return cacheFile, nil
 	}
+
 	if cacheKey == [32]byte{} {
 		return "", fmt.Errorf("cacheKey cannot be empty, the implementation is faulty.")
 	}
+
 	// cacheFile format: <tmpdir>/stars_2d06a89b2687.json
 	// each byte is 2 hex characters
 	path := filepath.Join(os.TempDir(), fmt.Sprintf("stars_%x.json", cacheKey[:6]))
@@ -193,6 +233,7 @@ func GetStarredRepos(user string, cacheKey [32]byte) (bytes.Buffer, error) {
 		return data, nil
 	}
 
+	// Cache file is empty, make an API call to GitHub and cache the results
 	InfoLogger.Println("Cache is empty. Fetching the starred repos for:", user)
 	args := []string{"api", fmt.Sprintf("users/%v/starred?page=1&per_page=1", user)}
 	stdOut, _, err := gh.Exec(args...)

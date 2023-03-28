@@ -30,6 +30,8 @@ func NewTestClient(fn RoundTripFunc) *http.Client {
 }
 
 func setup(args []string) {
+	// Switch to true to see the InfoLogger output
+	debug = false
 	rootCmd.PreRun(&cobra.Command{}, args)
 }
 
@@ -98,8 +100,6 @@ func TestGenerateCacheKey(t *testing.T) {
 }
 
 func TestGetCachePath(t *testing.T) {
-	// TODO: disable debug
-	debug = true
 	setup([]string{})
 	tmpPath := os.TempDir()
 	tests := []struct {
@@ -149,12 +149,10 @@ func (m *MockGithub) Exec(args ...string) (bytes.Buffer, bytes.Buffer, error) {
 }
 
 func TestGetStarredRepos(t *testing.T) {
-	// TODO: disable debug
-	debug = true
 	setup([]string{})
 
 	t.Run("FetchStarredReposFromCache", func(t *testing.T) {
-		// Create a test cache file
+		// Fetches data from an existing cache file
 		cacheFile = filepath.Join(os.TempDir(), "test_pull_cache.json")
 		want := []byte(`{"repos": [{"name": "test-cache-file", "url": "https://github.com/test/repo"}]}`)
 		file, err := os.OpenFile(cacheFile, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0644)
@@ -182,26 +180,31 @@ func TestGetStarredRepos(t *testing.T) {
 	})
 
 	t.Run("FetchStarredReposWithEmptyCache", func(t *testing.T) {
+		// Cache file doesn't exist, so we should fetch from Github
 		gh = &MockGithub{}
 		// Make sure we're not referencing a cacheFile that exists
 		cacheFile = ""
 		cacheKey := [32]byte{0x2d, 0x06, 0xa8, 0x9b, 0x26, 0x87, 0x74, 0x57, 0x13, 0xef, 0x0f, 0x02, 0x5b, 0x8f, 0xff, 0x17, 0x87, 0x3b, 0x87, 0x0e, 0x73, 0x04, 0x30, 0x0a, 0x98, 0x22, 0x86, 0x81, 0x6e, 0x47, 0x1e, 0x6e}
 		cachePath, err := GetCachePath(cacheKey)
+
 		if err != nil {
 			t.Fatal(err)
 		}
+
 		if fileExists(cachePath) {
 			// Remove the cache file if it exists
 			if err := os.Remove(cachePath); err != nil {
 				t.Fatal(err)
 			}
 		}
+
 		want := *bytes.NewBufferString("mock output")
 		got, err := GetStarredRepos("Link-", cacheKey)
 		if err != nil {
 			t.Fatal(err)
 		}
 		assert.Equal(t, want, got)
+
 		if fileExists(cachePath) {
 			// Remove the cache file if it exists
 			if err := os.Remove(cachePath); err != nil {
@@ -210,3 +213,17 @@ func TestGetStarredRepos(t *testing.T) {
 		}
 	})
 }
+
+// func TestSearch(t *testing.T) {
+// 	setup([]string{})
+
+// 	t.Run("SearchWithEmptyQuery", func(t *testing.T) {
+// 		// Search with an empty query
+// 		want := []Repo{}
+// 		got, err := Search(, "")
+// 		if err != nil {
+// 			t.Fatal(err)
+// 		}
+// 		assert.Equal(t, want, got)
+// 	})
+// }

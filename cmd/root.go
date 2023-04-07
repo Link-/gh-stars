@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"bytes"
+	"container/heap"
 	"crypto/sha256"
 	"encoding/json"
 	"errors"
@@ -13,6 +14,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/Link-/gh-stars/lib/pq"
 	"github.com/lithammer/fuzzysearch/fuzzy"
 	"github.com/spf13/cobra"
 )
@@ -100,22 +102,68 @@ var rootCmd = &cobra.Command{
 		if err != nil {
 			ErrorLogger.Fatal("Not able to search starred repos", err)
 		}
-		fmt.Println(found)
+		// Print the results
+		for found.Len() > 0 {
+			item := heap.Pop(&found).(*pq.Item)
+			fmt.Printf("%.2d:%s ", item.Priority, item.Value)
+		}
 	},
 }
 
-func Search(starredRepos bytes.Buffer, find string) ([]Repo, error) {
+// Find the search term in the starred repos
+// Returns a priority queue with the results sorted by rank (the higher the rank, the more accurate the match)
+func Search(starredRepos bytes.Buffer, find string) (pq.PriorityQueue, error) {
+	var found = make(pq.PriorityQueue, 0)
+	heap.Init(&found)
+
 	var repos []Repo
+	needles := strings.Fields(find)
 	err := json.Unmarshal(starredRepos.Bytes(), &repos)
 	if err != nil {
 		return nil, err
 	}
-	var found []Repo
+
 	for _, repo := range repos {
-		if fuzzy.RankMatchNormalizedFold(find, repo.Name) >= 0 || fuzzy.RankMatchNormalizedFold(find, repo.Description) >= 0 || len(fuzzy.Find(find, repo.Topics)) > 0 {
-			found = append(found, repo)
+		for _, needle := range needles {
+			inNameRank := fuzzy.RankMatchNormalizedFold(needle, repo.Name)
+			inNameMatch := func() int {
+				if fuzzy.MatchNormalizedFold(find, repo.Name) {
+					return 1
+				} else {
+					return 0
+				}
+			}()
+			inDescriptionRank := fuzzy.RankMatchNormalizedFold(needle, repo.Description)
+			inDescriptionMatch := func() int {
+				if fuzzy.MatchNormalizedFold(needle, repo.Description) {
+					return 1
+				} else {
+					return 0
+				}
+			}()
+			inTopicsMatch := len(fuzzy.Find(needle, repo.Topics))
+
+			// If the needle is found in the name, description or topics, add it to the results
+			// The rank priority is (the higher the score, the more accurate the match):
+			// 1. Exact match in name
+			// 2. Fuzzy match in name
+			// 3. Exact match in description
+			// 4. Fuzzy match in description
+			// 5. Fuzzy match in topics
+			if (inNameRank >= 0 && inNameMatch == 1) || (inDescriptionRank >= 0 && inDescriptionMatch == 1) || inTopicsMatch > 0 {
+				rank := inNameMatch*10 + 1/(inNameRank+2) + inDescriptionMatch*8 + 1/(inDescriptionRank+2) + inTopicsMatch*5
+				InfoLogger.Printf("Found %s in %s | rank: %d", needle, repo.Full_name, rank)
+				heap.Push(&found, &pq.Item{
+					Value:    repo,
+					Priority: rank,
+				})
+				break
+			} else {
+				continue
+			}
 		}
 	}
+
 	return found, nil
 }
 
@@ -234,6 +282,7 @@ func GetStarredRepos(user string, cacheKey [32]byte) (bytes.Buffer, error) {
 	}
 
 	// Cache file is empty, make an API call to GitHub and cache the results
+	// TODO: pagination
 	InfoLogger.Println("Cache is empty. Fetching the starred repos for:", user)
 	args := []string{"api", fmt.Sprintf("users/%v/starred?page=1&per_page=1", user)}
 	stdOut, _, err := gh.Exec(args...)

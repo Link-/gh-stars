@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/lithammer/fuzzysearch/fuzzy"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 )
@@ -30,7 +31,7 @@ func NewTestClient(fn RoundTripFunc) *http.Client {
 
 func setup(args []string) {
 	// Switch to true to see the InfoLogger output
-	debug = true
+	debug = false
 	rootCmd.PreRun(&cobra.Command{}, args)
 }
 
@@ -180,7 +181,7 @@ func TestGetStarredRepos(t *testing.T) {
 
 	t.Run("FetchStarredReposWithEmptyCache", func(t *testing.T) {
 		// Cache file doesn't exist, so we should fetch from Github
-		gh = &MockGithub{}
+		ghClient = &MockGithub{}
 		// Make sure we're not referencing a cacheFile that exists
 		cacheFile = ""
 		cacheKey := [32]byte{0x2d, 0x06, 0xa8, 0x9b, 0x26, 0x87, 0x74, 0x57, 0x13, 0xef, 0x0f, 0x02, 0x5b, 0x8f, 0xff, 0x17, 0x87, 0x3b, 0x87, 0x0e, 0x73, 0x04, 0x30, 0x0a, 0x98, 0x22, 0x86, 0x81, 0x6e, 0x47, 0x1e, 0x6e}
@@ -273,4 +274,21 @@ func TestSearch(t *testing.T) {
 			assert.Equal(t, tt.pqDepth, got.Len())
 		})
 	}
+}
+
+func TestSearchLibrary(t *testing.T) {
+	t.Run("FuzzySearchTests", func(t *testing.T) {
+		needle := "Mario levels"
+		haystack := `Generating Mario Levels with GPT2. Code for the paper "MarioGPT: Open-Ended Text2Level Generation through Large Language Models" https://arxiv.org/abs/2302.05981`
+		ratio := (float64(len(needle)) + float64(len(haystack)) - float64(fuzzy.LevenshteinDistance(needle, haystack))) / (float64(len(needle)) + float64(len(haystack)))
+		fmt.Printf("%.3f\n", ratio)
+		fmt.Printf("%d\n", len(haystack))
+		fmt.Println(fuzzy.Find(needle, []string{haystack}))
+		fmt.Println(fuzzy.Match(needle, haystack))
+		fmt.Println(fuzzy.MatchFold(needle, haystack))
+		fmt.Println(fuzzy.MatchNormalized(needle, haystack))
+		fmt.Println(fuzzy.MatchNormalizedFold(needle, haystack))
+		fmt.Println(fuzzy.RankMatchNormalizedFold(needle, haystack))
+		fmt.Println(fuzzy.FindNormalizedFold(needle, []string{haystack}))
+	})
 }

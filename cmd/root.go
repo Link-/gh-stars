@@ -15,6 +15,8 @@ import (
 	"strings"
 
 	"github.com/Link-/gh-stars/lib/pq"
+	"github.com/cli/go-gh"
+	"github.com/cli/go-gh/pkg/tableprinter"
 	"github.com/lithammer/fuzzysearch/fuzzy"
 	"github.com/spf13/cobra"
 )
@@ -25,6 +27,7 @@ type Repo struct {
 	Name      string `json:"name"`
 	Full_name string `json:"full_name"`
 	Private   bool   `json:"private"`
+	Url       string `json:"html_url"`
 	Owner     struct {
 		Login string `json:"login"`
 		Url   string `json:"url"`
@@ -54,7 +57,7 @@ var (
 	version   bool
 	debug     bool
 
-	gh          githubInterface
+	ghClient    githubInterface
 	client      *http.Client
 	InfoLogger  *log.Logger
 	ErrorLogger *log.Logger
@@ -77,7 +80,7 @@ var rootCmd = &cobra.Command{
 		// Initialize the HTTP client
 		client = &http.Client{}
 		// Initialize the GitHub client
-		gh = &github{}
+		ghClient = &github{}
 	},
 	Run: func(cmd *cobra.Command, args []string) {
 		if version {
@@ -89,23 +92,45 @@ var rootCmd = &cobra.Command{
 		if user == "" || find == "" {
 			ErrorLogger.Fatal("The --user, -u and --find, -f flags are required. See --help for more information")
 		}
-		// The Link header is unique enough to generate a cache key
+
+		// Generate the cache key from the Link header
 		key, err := GenerateCacheKey(user)
 		if err != nil {
 			ErrorLogger.Fatal("Not able to generate a cache key", err)
 		}
+
+		// Pull the starred repos from the cache or from the API if the cache is empty
 		starred, err := GetStarredRepos(user, key)
 		if err != nil {
 			ErrorLogger.Fatal("Not able to get starred repos", err)
 		}
+
+		// Fuzzy and ranked searched for the search term(s)
 		found, err := Search(starred, find)
 		if err != nil {
 			ErrorLogger.Fatal("Not able to search starred repos", err)
 		}
-		// Print the results
+
+		// Render the results
+		InfoLogger.Println("Rendering the results")
+		tp := tableprinter.New(os.Stdout, true, 300)
+		headerRow := []string{"Name", "URL", "Private", "Description", "Stars"}
+		for _, header := range headerRow {
+			tp.AddField(header)
+		}
+		tp.EndRow()
 		for found.Len() > 0 {
 			item := heap.Pop(&found).(*pq.Item)
-			fmt.Printf("%.2d:%s ", item.Priority, item.Value)
+			tp.AddField(item.Value.(Repo).Full_name)
+			tp.AddField(item.Value.(Repo).Url)
+			tp.AddField(fmt.Sprintf("%t", item.Value.(Repo).Private))
+			tp.AddField(item.Value.(Repo).Description)
+			tp.AddField(fmt.Sprintf("%d", item.Value.(Repo).Stars))
+			tp.EndRow()
+		}
+		err = tp.Render()
+		if err != nil {
+			ErrorLogger.Fatal("Not able to render the table", err)
 		}
 	},
 }
@@ -125,9 +150,9 @@ func Search(starredRepos bytes.Buffer, find string) (pq.PriorityQueue, error) {
 
 	for _, repo := range repos {
 		for _, needle := range needles {
-			inNameRank := fuzzy.RankMatchNormalizedFold(needle, repo.Name)
+			inNameRank := fuzzy.RankMatchNormalizedFold(needle, repo.Full_name)
 			inNameMatch := func() int {
-				if fuzzy.MatchNormalizedFold(find, repo.Name) {
+				if fuzzy.MatchNormalizedFold(needle, repo.Full_name) {
 					return 1
 				} else {
 					return 0
@@ -146,12 +171,12 @@ func Search(starredRepos bytes.Buffer, find string) (pq.PriorityQueue, error) {
 			// If the needle is found in the name, description or topics, add it to the results
 			// The rank priority is (the higher the score, the more accurate the match):
 			// 1. Exact match in name
-			// 2. Fuzzy match in name
-			// 3. Exact match in description
-			// 4. Fuzzy match in description
-			// 5. Fuzzy match in topics
-			if (inNameRank >= 0 && inNameMatch == 1) || (inDescriptionRank >= 0 && inDescriptionMatch == 1) || inTopicsMatch > 0 {
-				rank := inNameMatch*10 + 1/(inNameRank+2) + inDescriptionMatch*8 + 1/(inDescriptionRank+2) + inTopicsMatch*5
+			// 2. Exact match in description
+			// 3. Fuzzy match in topics
+			// 4. Fuzzy match in name
+			// 5. Fuzzy match in description
+			if inNameMatch == 1 || inDescriptionMatch == 1 || inTopicsMatch > 0 {
+				rank := inNameMatch*1000 - (inNameRank + 1) + inDescriptionMatch*100 - (inDescriptionRank + 1) + inTopicsMatch*50
 				InfoLogger.Printf("Found %s in %s | rank: %d", needle, repo.Full_name, rank)
 				heap.Push(&found, &pq.Item{
 					Value:    repo,
@@ -284,8 +309,8 @@ func GetStarredRepos(user string, cacheKey [32]byte) (bytes.Buffer, error) {
 	// Cache file is empty, make an API call to GitHub and cache the results
 	// TODO: pagination
 	InfoLogger.Println("Cache is empty. Fetching the starred repos for:", user)
-	args := []string{"api", fmt.Sprintf("users/%v/starred?page=1&per_page=1", user)}
-	stdOut, _, err := gh.Exec(args...)
+	args := []string{"api", fmt.Sprintf("users/%v/starred?page=1&per_page=100", user)}
+	stdOut, _, err := ghClient.Exec(args...)
 	if err != nil {
 		return bytes.Buffer{}, err
 	}

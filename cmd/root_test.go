@@ -9,7 +9,6 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/lithammer/fuzzysearch/fuzzy"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 )
@@ -240,25 +239,32 @@ func TestSearch(t *testing.T) {
 		pqDepth int
 	}{
 		{
-			name:    "SearchWithEmptyFind",
+			name:    "SearchWithEmptyTerm",
 			data:    testData,
 			wantErr: false,
 			find:    "",
 			pqDepth: 0,
 		},
 		{
-			name:    "SearchReturnsMatches",
+			name:    "SearchWithSingleTerm",
 			data:    testData,
 			wantErr: false,
 			find:    "amethyst",
 			pqDepth: 1,
 		},
 		{
-			name:    "SearchReturnsMultipleMatches",
+			name:    "SearchWithSingleLetterTerm",
 			data:    testData,
 			wantErr: false,
 			find:    "y",
-			pqDepth: 4,
+			pqDepth: 0,
+		},
+		{
+			name:    "SearchWithMultipleWords",
+			data:    testData,
+			wantErr: false,
+			find:    "amethyst engine",
+			pqDepth: 1,
 		},
 	}
 
@@ -274,21 +280,4 @@ func TestSearch(t *testing.T) {
 			assert.Equal(t, tt.pqDepth, got.Len())
 		})
 	}
-}
-
-func TestSearchLibrary(t *testing.T) {
-	t.Run("FuzzySearchTests", func(t *testing.T) {
-		needle := "Mario levels"
-		haystack := `Generating Mario Levels with GPT2. Code for the paper "MarioGPT: Open-Ended Text2Level Generation through Large Language Models" https://arxiv.org/abs/2302.05981`
-		ratio := (float64(len(needle)) + float64(len(haystack)) - float64(fuzzy.LevenshteinDistance(needle, haystack))) / (float64(len(needle)) + float64(len(haystack)))
-		fmt.Printf("%.3f\n", ratio)
-		fmt.Printf("%d\n", len(haystack))
-		fmt.Println(fuzzy.Find(needle, []string{haystack}))
-		fmt.Println(fuzzy.Match(needle, haystack))
-		fmt.Println(fuzzy.MatchFold(needle, haystack))
-		fmt.Println(fuzzy.MatchNormalized(needle, haystack))
-		fmt.Println(fuzzy.MatchNormalizedFold(needle, haystack))
-		fmt.Println(fuzzy.RankMatchNormalizedFold(needle, haystack))
-		fmt.Println(fuzzy.FindNormalizedFold(needle, []string{haystack}))
-	})
 }

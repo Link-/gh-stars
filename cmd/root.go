@@ -114,7 +114,7 @@ var rootCmd = &cobra.Command{
 		// Render the results
 		InfoLogger.Println("Rendering the results")
 		tp := tableprinter.New(os.Stdout, true, 300)
-		headerRow := []string{"Name", "URL", "Private", "Description", "Stars"}
+		headerRow := []string{"Name", "URL", "Description", "Stars", "Rank"}
 		for _, header := range headerRow {
 			tp.AddField(header)
 		}
@@ -123,9 +123,9 @@ var rootCmd = &cobra.Command{
 			item := heap.Pop(&found).(*pq.Item)
 			tp.AddField(item.Value.(Repo).Full_name)
 			tp.AddField(item.Value.(Repo).Url)
-			tp.AddField(fmt.Sprintf("%t", item.Value.(Repo).Private))
 			tp.AddField(item.Value.(Repo).Description)
 			tp.AddField(fmt.Sprintf("%d", item.Value.(Repo).Stars))
+			tp.AddField(fmt.Sprintf("%d", item.Priority))
 			tp.EndRow()
 		}
 		err = tp.Render()
@@ -150,41 +150,37 @@ func Search(starredRepos bytes.Buffer, find string) (pq.PriorityQueue, error) {
 
 	for _, repo := range repos {
 		for _, needle := range needles {
-			inNameRank := fuzzy.RankMatchNormalizedFold(needle, repo.Full_name)
-			inNameMatch := func() int {
-				if fuzzy.MatchNormalizedFold(needle, repo.Full_name) {
-					return 1
-				} else {
-					return 0
-				}
-			}()
-			inDescriptionRank := fuzzy.RankMatchNormalizedFold(needle, repo.Description)
-			inDescriptionMatch := func() int {
-				if fuzzy.MatchNormalizedFold(needle, repo.Description) {
-					return 1
-				} else {
-					return 0
-				}
-			}()
-			inTopicsMatch := len(fuzzy.Find(needle, repo.Topics))
-
-			// If the needle is found in the name, description or topics, add it to the results
-			// The rank priority is (the higher the score, the more accurate the match):
-			// 1. Exact match in name
-			// 2. Exact match in description
-			// 3. Fuzzy match in topics
-			// 4. Fuzzy match in name
-			// 5. Fuzzy match in description
-			if inNameMatch == 1 || inDescriptionMatch == 1 || inTopicsMatch > 0 {
-				rank := inNameMatch*1000 - (inNameRank + 1) + inDescriptionMatch*100 - (inDescriptionRank + 1) + inTopicsMatch*50
-				InfoLogger.Printf("Found %s in %s | rank: %d", needle, repo.Full_name, rank)
+			// Handle the repository name
+			rank := fuzzy.RankMatchNormalizedFold(needle, repo.Name)
+			InfoLogger.Print("Rank for: ", needle, " in ", repo.Name, " is ", rank)
+			if rank >= 0 && rank <= 2 {
 				heap.Push(&found, &pq.Item{
 					Value:    repo,
-					Priority: rank,
+					Priority: (rank + 10) * 100,
 				})
-				break
-			} else {
-				continue
+			}
+			// Handle the repository description
+			descriptionWords := strings.Fields(repo.Description)
+			for _, word := range descriptionWords {
+				rank := fuzzy.RankMatchNormalizedFold(needle, word)
+				InfoLogger.Print("Rank for: ", needle, " in ", word, " is ", rank)
+				if rank >= 0 && rank <= 2 {
+					heap.Push(&found, &pq.Item{
+						Value:    repo,
+						Priority: (rank + 5) * 50,
+					})
+				}
+			}
+			// Handle the topics
+			for _, topic := range repo.Topics {
+				rank := fuzzy.RankMatchNormalizedFold(needle, topic)
+				InfoLogger.Print("Rank for: ", needle, " in ", topic, " is ", rank)
+				if rank >= 0 && rank <= 2 {
+					heap.Push(&found, &pq.Item{
+						Value:    repo,
+						Priority: (rank + 1) * 25,
+					})
+				}
 			}
 		}
 	}

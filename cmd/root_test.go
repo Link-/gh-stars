@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/lithammer/fuzzysearch/fuzzy"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 )
@@ -30,7 +31,7 @@ func NewTestClient(fn RoundTripFunc) *http.Client {
 
 func setup(args []string) {
 	// Switch to true to see the InfoLogger output
-	debug = false
+	debug = true
 	rootCmd.PreRun(&cobra.Command{}, args)
 }
 
@@ -257,13 +258,34 @@ func TestSearch(t *testing.T) {
 			data:    testData,
 			wantErr: false,
 			find:    "y",
-			pqDepth: 0,
+			pqDepth: 7,
 		},
 		{
 			name:    "SearchWithMultipleWords",
 			data:    testData,
 			wantErr: false,
 			find:    "amethyst engine",
+			pqDepth: 1,
+		},
+		{
+			name:    "SearchWithSingleTermNoDuplicates",
+			data:    testData,
+			wantErr: false,
+			find:    "gatekeeper",
+			pqDepth: 1,
+		},
+		{
+			name:    "SearchWithSingleTermInTheMiddleOfRepoName",
+			data:    testData,
+			wantErr: false,
+			find:    "export",
+			pqDepth: 1,
+		},
+		{
+			name:    "SearchProximitySuccess",
+			data:    testData,
+			wantErr: false,
+			find:    "gateleeper",
 			pqDepth: 1,
 		},
 	}
@@ -280,4 +302,25 @@ func TestSearch(t *testing.T) {
 			assert.Equal(t, tt.pqDepth, got.Len())
 		})
 	}
+}
+
+func TestFuzzySearch(t *testing.T) {
+	t.Skip("Not needed")
+	sources := []string{"gateleeper", "gates", "gate", "g", "galeteeper", "gatekeepers"}
+	targets := []string{"gateleeper", "gates", "gate", "g", "galeteeper", "gatekeepers"}
+	for _, source := range sources {
+		for _, target := range targets {
+			fmt.Println(source, target, fuzzy.LevenshteinDistance(source, target))
+		}
+	}
+	// assert.Equal(t, 1, fuzzy.LevenshteinDistance(source, target))
+	// assert.Equal(t, false, fuzzy.Match(source, target))
+	// assert.Equal(t, 1, fuzzy.RankMatch(source, target))
+	// assert.Equal(t, 1, fuzzy.RankMatchNormalized(source, target))
+	// assert.Equal(t, 1, fuzzy.RankMatchNormalizedFold(source, target))
+	// assert.Equal(t, 1, len(fuzzy.Find(source, []string{target})))
+	// assert.Equal(t, 1, len(fuzzy.RankFindFold(source, []string{target})))
+	// assert.Equal(t, 1, len(fuzzy.RankFindNormalized(source, []string{target})))
+	// assert.Equal(t, 1, fuzzy.Find(source, []string{target}))
+	// fmt.Printf("%+v\n", fuzzy.RankFind("gateleeper", targets))
 }

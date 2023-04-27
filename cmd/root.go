@@ -151,30 +151,46 @@ func Search(starredRepos bytes.Buffer, find string) (pq.PriorityQueue, error) {
 	for _, repo := range repos {
 		for _, needle := range needles {
 			// Handle the repository name
-			rank := fuzzy.RankMatchNormalizedFold(needle, repo.Name)
-			InfoLogger.Print("Rank for: ", needle, " in ", repo.Name, " is ", rank)
-			if rank >= 0 && rank <= 2 {
-				heap.Push(&found, &pq.Item{
-					Value:    repo,
-					Priority: (rank + 10) * 100,
-				})
+			// Split the repository on - and _
+			repoNameWords := strings.FieldsFunc(repo.Name, func(r rune) bool {
+				return r == '-' || r == '_'
+			})
+			match := false
+			for _, word := range repoNameWords {
+				rank := fuzzy.LevenshteinDistance(needle, word)
+				// TODO: cleanup
+				// InfoLogger.Print("Rank for: ", needle, " in ", repo.Name, " is ", rank)
+				if rank >= 0 && rank <= 2 {
+					heap.Push(&found, &pq.Item{
+						Value:    repo,
+						Priority: (rank + 10) * 100,
+					})
+					match = true
+					break
+				}
+			}
+			if match {
+				continue
 			}
 			// Handle the repository description
 			descriptionWords := strings.Fields(repo.Description)
 			for _, word := range descriptionWords {
-				rank := fuzzy.RankMatchNormalizedFold(needle, word)
-				InfoLogger.Print("Rank for: ", needle, " in ", word, " is ", rank)
+				rank := fuzzy.LevenshteinDistance(needle, word)
+				// TODO: cleanup
+				// InfoLogger.Print("Rank for: ", needle, " in ", word, " is ", rank)
 				if rank >= 0 && rank <= 2 {
 					heap.Push(&found, &pq.Item{
 						Value:    repo,
 						Priority: (rank + 5) * 50,
 					})
 				}
+				continue
 			}
 			// Handle the topics
 			for _, topic := range repo.Topics {
-				rank := fuzzy.RankMatchNormalizedFold(needle, topic)
-				InfoLogger.Print("Rank for: ", needle, " in ", topic, " is ", rank)
+				rank := fuzzy.LevenshteinDistance(needle, topic)
+				// TODO: cleanup
+				// InfoLogger.Print("Rank for: ", needle, " in ", topic, " is ", rank)
 				if rank >= 0 && rank <= 2 {
 					heap.Push(&found, &pq.Item{
 						Value:    repo,
@@ -305,7 +321,7 @@ func GetStarredRepos(user string, cacheKey [32]byte) (bytes.Buffer, error) {
 	// Cache file is empty, make an API call to GitHub and cache the results
 	// TODO: pagination
 	InfoLogger.Println("Cache is empty. Fetching the starred repos for:", user)
-	args := []string{"api", fmt.Sprintf("users/%v/starred?page=1&per_page=100", user)}
+	args := []string{"api", "--paginate", fmt.Sprintf("users/%v/starred", user), "--jq ."}
 	stdOut, _, err := ghClient.Exec(args...)
 	if err != nil {
 		return bytes.Buffer{}, err

@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"bytes"
+	"container/heap"
 	"fmt"
 	"io"
 	"net/http"
@@ -9,6 +10,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/Link-/gh-stars/lib/pq"
 	"github.com/lithammer/fuzzysearch/fuzzy"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
@@ -300,6 +302,75 @@ func TestSearch(t *testing.T) {
 				assert.NoError(t, err)
 			}
 			assert.Equal(t, tt.pqDepth, got.Len())
+		})
+	}
+}
+
+func TestRender(t *testing.T) {
+	setup([]string{})
+
+	searchResults := make(pq.PriorityQueue, 0)
+	heap.Init(&searchResults)
+	for i := 0; i < 5; i++ {
+		heap.Push(&searchResults, &pq.Item{
+			Value: &Repo{
+				Name:        fmt.Sprintf("gatekeeper-%d", i),
+				Description: fmt.Sprintf("A gatekeeper-%d for your GitHub organization", i),
+				Url:         fmt.Sprintf("https://github.com/gatekeeper/gatekeeper-%d", i),
+			},
+			Priority: 1000 / (i + 1),
+		})
+	}
+
+	tests := []struct {
+		name    string
+		input   pq.PriorityQueue
+		limit   int
+		wantErr bool
+		want    interface{}
+	}{
+		{
+			name:    "RenderEmptyPriorityQueue",
+			input:   make(pq.PriorityQueue, 0),
+			limit:   -1,
+			wantErr: false,
+			want:    "Name  URL  Description  Stars  Rank\n",
+		},
+		{
+			name:    "RenderPriorityQueueWithoutLimit",
+			input:   searchResults,
+			limit:   -1,
+			wantErr: false,
+			want:    "",
+		},
+		{
+			name:    "RenderPriorityQueueWithLimitLessThanResults",
+			input:   searchResults,
+			limit:   3,
+			wantErr: false,
+			want:    "",
+		},
+		{
+			name:    "RenderPriorityQueueWithLimitHigherThanResults",
+			input:   searchResults,
+			limit:   10,
+			wantErr: false,
+			want:    "",
+		},
+	}
+
+	// Run the tests
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var buf bytes.Buffer
+			err := Render(tt.input, tt.limit, &buf)
+			if tt.wantErr {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+			}
+			fmt.Println(buf.String())
+			// assert.Equal(t, tt.want, buf.String())
 		})
 	}
 }

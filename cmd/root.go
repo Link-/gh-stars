@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"math"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -22,6 +23,7 @@ import (
 )
 
 const VERSION = "0.1.0"
+const MAX_FUZZY_DISTANCE = 2 // Maximum Levenshtein distance for fuzzy search. Higher values are more permissive
 
 type Repo struct {
 	Name      string `json:"name"`
@@ -111,28 +113,47 @@ var rootCmd = &cobra.Command{
 			ErrorLogger.Fatal("Not able to search starred repos", err)
 		}
 
-		// Render the results
-		InfoLogger.Println("Rendering the results")
-		tp := tableprinter.New(os.Stdout, true, 300)
-		headerRow := []string{"Name", "URL", "Description", "Stars", "Rank"}
-		for _, header := range headerRow {
-			tp.AddField(header)
-		}
-		tp.EndRow()
-		for found.Len() > 0 {
-			item := heap.Pop(&found).(*pq.Item)
-			tp.AddField(item.Value.(Repo).Full_name)
-			tp.AddField(item.Value.(Repo).Url)
-			tp.AddField(item.Value.(Repo).Description)
-			tp.AddField(fmt.Sprintf("%d", item.Value.(Repo).Stars))
-			tp.AddField(fmt.Sprintf("%d", item.Priority))
-			tp.EndRow()
-		}
-		err = tp.Render()
-		if err != nil {
+		if err := Render(found, limit, os.Stdout); err != nil {
 			ErrorLogger.Fatal("Not able to render the table", err)
 		}
 	},
+}
+
+func Render(results pq.PriorityQueue, limit int, renderTarget io.Writer) error {
+	// Render the results
+	InfoLogger.Println("Rendering the results")
+
+	if limit > results.Len() {
+		InfoLogger.Printf("Results: %d are higher than the limit: %d \n", results.Len(), limit)
+	}
+
+	var renderLimit int
+	if limit == -1 {
+		renderLimit = results.Len()
+	} else {
+		renderLimit = int(math.Min(float64(limit), float64(results.Len())))
+	}
+
+	tp := tableprinter.New(renderTarget, true, 300)
+	headerRow := []string{"Name", "URL", "Description", "Stars", "Rank"}
+	for _, header := range headerRow {
+		tp.AddField(header)
+	}
+	tp.EndRow()
+	for i := 0; i < renderLimit; i++ {
+		item := heap.Pop(&results).(*pq.Item)
+		tp.AddField(item.Value.(Repo).Full_name)
+		tp.AddField(item.Value.(Repo).Url)
+		tp.AddField(item.Value.(Repo).Description)
+		tp.AddField(fmt.Sprintf("%d", item.Value.(Repo).Stars))
+		tp.AddField(fmt.Sprintf("%d", item.Priority))
+		tp.EndRow()
+	}
+	err := tp.Render()
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 // Find the search term in the starred repos
@@ -160,7 +181,7 @@ func Search(starredRepos bytes.Buffer, find string) (pq.PriorityQueue, error) {
 				rank := fuzzy.LevenshteinDistance(needle, word)
 				// TODO: cleanup
 				// InfoLogger.Print("Rank for: ", needle, " in ", repo.Name, " is ", rank)
-				if rank >= 0 && rank <= 2 {
+				if rank >= 0 && rank <= MAX_FUZZY_DISTANCE {
 					heap.Push(&found, &pq.Item{
 						Value:    repo,
 						Priority: (rank + 10) * 100,
@@ -178,7 +199,7 @@ func Search(starredRepos bytes.Buffer, find string) (pq.PriorityQueue, error) {
 				rank := fuzzy.LevenshteinDistance(needle, word)
 				// TODO: cleanup
 				// InfoLogger.Print("Rank for: ", needle, " in ", word, " is ", rank)
-				if rank >= 0 && rank <= 2 {
+				if rank >= 0 && rank <= MAX_FUZZY_DISTANCE {
 					heap.Push(&found, &pq.Item{
 						Value:    repo,
 						Priority: (rank + 5) * 50,
@@ -191,7 +212,7 @@ func Search(starredRepos bytes.Buffer, find string) (pq.PriorityQueue, error) {
 				rank := fuzzy.LevenshteinDistance(needle, topic)
 				// TODO: cleanup
 				// InfoLogger.Print("Rank for: ", needle, " in ", topic, " is ", rank)
-				if rank >= 0 && rank <= 2 {
+				if rank >= 0 && rank <= MAX_FUZZY_DISTANCE {
 					heap.Push(&found, &pq.Item{
 						Value:    repo,
 						Priority: (rank + 1) * 25,
@@ -321,11 +342,19 @@ func GetStarredRepos(user string, cacheKey [32]byte) (bytes.Buffer, error) {
 	// Cache file is empty, make an API call to GitHub and cache the results
 	// TODO: pagination
 	InfoLogger.Println("Cache is empty. Fetching the starred repos for:", user)
-	args := []string{"api", "--paginate", fmt.Sprintf("users/%v/starred", user), "--jq ."}
+	args := []string{"api", "--paginate", fmt.Sprintf("users/%v/starred", user)}
 	stdOut, _, err := ghClient.Exec(args...)
 	if err != nil {
 		return bytes.Buffer{}, err
 	}
+
+	// TODO: This is extremely nasty, and needs to be refactored once this PR
+	// is merged: https://github.com/cli/cli/pull/7190
+	// This resolves the problem of gh api --paginate returning concatenated slices instead of
+	// a single slice of all the results
+	result := stdOut.String()
+	jsonResult := strings.Replace(result, "][", ",", -1)
+	resultBuffer := bytes.NewBufferString(jsonResult)
 
 	// Write stdOut to the cache file
 	InfoLogger.Println("Writing the fetched repos to cache.")
@@ -335,12 +364,12 @@ func GetStarredRepos(user string, cacheKey [32]byte) (bytes.Buffer, error) {
 	}
 	defer file.Close()
 
-	_, err = file.Write(stdOut.Bytes())
+	_, err = file.Write(resultBuffer.Bytes())
 	if err != nil {
 		return bytes.Buffer{}, err
 	}
 
-	return stdOut, nil
+	return *resultBuffer, nil
 }
 
 // Checks if a file exists at the given path

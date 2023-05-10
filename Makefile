@@ -28,6 +28,10 @@ clean:
 
 # Run the tests
 test: build
+	go test ./...
+
+# Run the tests and print a rich output
+test-rich: build
 	go test -v ./...
 
 # Build the project

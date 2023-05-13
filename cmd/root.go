@@ -393,8 +393,8 @@ func init() {
 	//     Show this message and exit.
 	//   -u, --user <handle>
 	//     Any GitHub handle. Example: link-
-	//   -c, --cache-dir <directory>
-	//     Directory you want to store the cache file in. Example: /tmp/.starscache
+	//   -c, --cache-file <file path>
+	//     File you want to store the cache file in. If not provided, the tool will generate one in $TMPDIR
 	//   -f, --find <keyword>
 	//     The keyword you want to search for. Example: es6
 	//   -l, --limit <number>
@@ -405,7 +405,7 @@ func init() {
 	//     Outputs debugging log
 	rootCmd.Flags().StringVarP(&user, "user", "u", "", "GitHub handle of the user you want to search their stars (required)")
 	rootCmd.Flags().StringVarP(&find, "find", "f", "", "The keyword you want to search for (required)")
-	rootCmd.Flags().StringVarP(&cacheFile, "cache-file", "c", "", "File you want to store the cache file in. If not provided, the tool will generate one in $TMPDIR/.starscache")
+	rootCmd.Flags().StringVarP(&cacheFile, "cache-file", "c", "", "File you want to store the cache file in. If not provided, the tool will generate one in $TMPDIR")
 	rootCmd.Flags().IntVarP(&limit, "limit", "l", 10, "Limit the search results to the specified number, default: 10")
 	rootCmd.Flags().BoolVarP(&version, "version", "v", false, "Print current version")
 	rootCmd.Flags().BoolVarP(&debug, "debug", "d", false, "Enables debug mode, default: false")
@@ -424,7 +424,7 @@ func getRootHelp() string {
      $$$$$$$  |  \$$$$  |\$$$$$$$ |$$ |  *   $$$$$$$  |
      \_______/ *  \____/  \_______|\__|      \_______/ 
 
-Fast full-text search for a keyword in your or any other user's GitHub starred repositories.
+Fast fuzzy search for a keyword in your or any other user's GitHub starred repositories.
 Complete documentation is available at: https://github.com/Link-/gh-stars
 
 Synoposis:
@@ -438,14 +438,14 @@ Usage:
 Flags:
 
 	Required:
-	-u, --user <handle>         Any GitHub handle, e.g. Link-
-	-f, --find <keyword>        The keyword you want to search for, e.g. es6
+	-u, --user <handle>          Any GitHub handle, e.g. Link-
+	-f, --find <keyword>         The keyword you want to search for, e.g. es6
 
 	Optional:
-	-c, --cache-dir <directory> Directory you want to store the cache file in, e.g. /tmp/.starscache
-	-l, --limit <number>        Limit the search results to the specified number, e.g. 10
-	-v, --version               Outputs release version
-	-d, --debug                 Outputs debugging log
+	-c, --cache-file <file path> File you want to store the cache file in. If not provided, the tool will generate one in $TMPDIR
+	-l, --limit <number>         Limit the search results to the specified number, e.g. 10
+	-v, --version                Outputs release version
+	-d, --debug                  Outputs debugging log
 
 Examples:
 

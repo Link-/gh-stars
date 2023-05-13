@@ -43,8 +43,8 @@ Options:
   -u, --user <handle>
     Any GitHub handle. Example: link-
 
-  -c, --cache-dir <directory>
-    Directory you want to store the cache file in. Example: /tmp/.cache
+  -c, --cache-file <file path>
+    File you want to store the cache file in. If not provided, the tool will generate one in $TMPDIR
 
   -f, --find <keyword>
     The keyword you want to search for. Example: es6
@@ -52,104 +52,36 @@ Options:
   -l, --limit <number>
     Limit the search results to the specified number. Default is 10
 
-  -V, --verbose
-    Outputs debugging log
-
   -v, --version
     Outputs release version
 
   -d, --debug
-    Outputs stack trace in case an exception is thrown
+    Outputs debugging log
 ```
 
 ### Examples
 
-**Non-verbose output:**
+**Simple search**
 
 ```sh
-gh stars --user 'link-' --find 'es6'
+# Search for es6 in Link-'s starred repositories
+gh stars -u Link- -f es6
 ```
 
-```json
-[
-  {
-    "repo_name": "lukehoban/es6features",
-    "repo_description": "Overview of ECMAScript 6 features",
-    "repo_url": "https://github.com/lukehoban/es6features",
-    "repo_stars": 27672
-  },
-  {
-    "repo_name": "google/sa360-flightsfeed",
-    "repo_description": "Generate SA360 compatible feeds for airlines on BigQuery  :rocket:",
-    "repo_url": "https://github.com/google/sa360-flightsfeed",
-    "repo_stars": 8
-  },
-  {
-    "repo_name": "DrkSephy/es6-cheatsheet",
-    "repo_description": "ES2015 [ES6] cheatsheet containing tips, tricks, best practices and code snippets",
-    "repo_url": "https://github.com/DrkSephy/es6-cheatsheet",
-    "repo_stars": 11410
-  }
-]
+```text
+TODO: add response
 ```
 
-**Verbose output & override cache directory:**
+**Override cache directory:**
 
 ```sh
-gh stars --user 'link-' --cache-dir '/tmp/.cache' --find 'es6' --verbose
+gh stars --user 'link-' --cache-file '/tmp/.cache' --find 'es6'
 ```
 
-```json
-🕵    INFO: Searching for "es6" in "link-'s" starred catalogue
-⚠️    INFO:: Serving search results from cache
-[
-  {
-    "repo_name": "lukehoban/es6features",
-    "repo_description": "Overview of ECMAScript 6 features",
-    "repo_url": "https://github.com/lukehoban/es6features",
-    "repo_stars": 27672
-  },
-  {
-    "repo_name": "google/sa360-flightsfeed",
-    "repo_description": "Generate SA360 compatible feeds for airlines on BigQuery  :rocket:",
-    "repo_url": "https://github.com/google/sa360-flightsfeed",
-    "repo_stars": 8
-  },
-  {
-    "repo_name": "DrkSephy/es6-cheatsheet",
-    "repo_description": "ES2015 [ES6] cheatsheet containing tips, tricks, best practices and code snippets",
-    "repo_url": "https://github.com/DrkSephy/es6-cheatsheet",
-    "repo_stars": 11410
-  }
-]
+```text
+TODO: add response
 ```
 
-**Parsing the output with jq**
-You can pipe the standard output to be handled by tools like [jq](https://stedolan.github.io/jq/) for more magic:
+## LICENSE
 
-```sh
-# Return the first search result only
-gh stars -u 'link-' -f 'es6' | jq '.[0]'
-```
-
-```json
-{
-  "repo_name": "lukehoban/es6features",
-  "repo_description": "Overview of ECMAScript 6 features",
-  "repo_url": "https://github.com/lukehoban/es6features",
-  "repo_stars": 27672
-}
-```
-
-```sh
-# Return repo_name of every result element
-gh stars -u 'link-' -f 'es6' | jq 'map(.repo_name)'
-```
-
-```json
-[
-  "lukehoban/es6features",
-  "google/sa360-flightsfeed",
-  "DrkSephy/es6-cheatsheet"
-]
-```
+TODO: add license

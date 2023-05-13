@@ -22,7 +22,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-const VERSION = "0.1.0"
+const VERSION = "0.1.1"
 const MAX_FUZZY_DISTANCE = 2 // Maximum Levenshtein distance for fuzzy search. Higher values are more permissive
 
 type Repo struct {
@@ -55,7 +55,6 @@ var (
 	find      string
 	cacheFile string
 	limit     int
-	verbose   bool
 	version   bool
 	debug     bool
 
@@ -117,6 +116,7 @@ var rootCmd = &cobra.Command{
 			ErrorLogger.Fatal("Not able to render the table", err)
 		}
 	},
+	Version: VERSION,
 }
 
 func Render(results pq.PriorityQueue, limit int, renderTarget io.Writer) error {
@@ -128,7 +128,7 @@ func Render(results pq.PriorityQueue, limit int, renderTarget io.Writer) error {
 	}
 
 	var renderLimit int
-	if limit == -1 {
+	if limit <= -1 {
 		renderLimit = results.Len()
 	} else {
 		renderLimit = int(math.Min(float64(limit), float64(results.Len())))
@@ -179,12 +179,10 @@ func Search(starredRepos bytes.Buffer, find string) (pq.PriorityQueue, error) {
 			match := false
 			for _, word := range repoNameWords {
 				rank := fuzzy.LevenshteinDistance(needle, word)
-				// TODO: cleanup
-				// InfoLogger.Print("Rank for: ", needle, " in ", repo.Name, " is ", rank)
 				if rank >= 0 && rank <= MAX_FUZZY_DISTANCE {
 					heap.Push(&found, &pq.Item{
 						Value:    repo,
-						Priority: (rank + 10) * 100,
+						Priority: (rank/(rank+1) + 10) * 100,
 					})
 					match = true
 					break
@@ -197,12 +195,10 @@ func Search(starredRepos bytes.Buffer, find string) (pq.PriorityQueue, error) {
 			descriptionWords := strings.Fields(repo.Description)
 			for _, word := range descriptionWords {
 				rank := fuzzy.LevenshteinDistance(needle, word)
-				// TODO: cleanup
-				// InfoLogger.Print("Rank for: ", needle, " in ", word, " is ", rank)
 				if rank >= 0 && rank <= MAX_FUZZY_DISTANCE {
 					heap.Push(&found, &pq.Item{
 						Value:    repo,
-						Priority: (rank + 5) * 50,
+						Priority: (rank/(rank+1) + 5) * 50,
 					})
 				}
 				continue
@@ -210,12 +206,10 @@ func Search(starredRepos bytes.Buffer, find string) (pq.PriorityQueue, error) {
 			// Handle the topics
 			for _, topic := range repo.Topics {
 				rank := fuzzy.LevenshteinDistance(needle, topic)
-				// TODO: cleanup
-				// InfoLogger.Print("Rank for: ", needle, " in ", topic, " is ", rank)
 				if rank >= 0 && rank <= MAX_FUZZY_DISTANCE {
 					heap.Push(&found, &pq.Item{
 						Value:    repo,
-						Priority: (rank + 1) * 25,
+						Priority: (rank/(rank+1) + 1) * 25,
 					})
 				}
 			}
@@ -340,7 +334,6 @@ func GetStarredRepos(user string, cacheKey [32]byte) (bytes.Buffer, error) {
 	}
 
 	// Cache file is empty, make an API call to GitHub and cache the results
-	// TODO: pagination
 	InfoLogger.Println("Cache is empty. Fetching the starred repos for:", user)
 	args := []string{"api", "--paginate", fmt.Sprintf("users/%v/starred", user)}
 	stdOut, _, err := ghClient.Exec(args...)
@@ -406,17 +399,14 @@ func init() {
 	//     The keyword you want to search for. Example: es6
 	//   -l, --limit <number>
 	//     Limit the search results to the specified number. Default is 10
-	//   -V, --verbose
-	//     Print activity log
 	//   -v, --version
 	//     Print current version
 	//   -d, --debug
-	//     Enables debug mode
+	//     Outputs debugging log
 	rootCmd.Flags().StringVarP(&user, "user", "u", "", "GitHub handle of the user you want to search their stars (required)")
 	rootCmd.Flags().StringVarP(&find, "find", "f", "", "The keyword you want to search for (required)")
 	rootCmd.Flags().StringVarP(&cacheFile, "cache-file", "c", "", "File you want to store the cache file in. If not provided, the tool will generate one in $TMPDIR/.starscache")
 	rootCmd.Flags().IntVarP(&limit, "limit", "l", 10, "Limit the search results to the specified number, default: 10")
-	rootCmd.Flags().BoolVarP(&verbose, "verbose", "V", false, "Print activity log, default: false")
 	rootCmd.Flags().BoolVarP(&version, "version", "v", false, "Print current version")
 	rootCmd.Flags().BoolVarP(&debug, "debug", "d", false, "Enables debug mode, default: false")
 	rootCmd.SetHelpTemplate(getRootHelp())
@@ -454,9 +444,8 @@ Flags:
 	Optional:
 	-c, --cache-dir <directory> Directory you want to store the cache file in, e.g. /tmp/.starscache
 	-l, --limit <number>        Limit the search results to the specified number, e.g. 10
-	-V, --verbose               Outputs debugging log
 	-v, --version               Outputs release version
-	-d, --debug                 Outputs stack trace in case an exception is thrown
+	-d, --debug                 Outputs debugging log
 
 Examples:
 
@@ -468,9 +457,6 @@ Examples:
 
 	# Store the cache file in /tmp/.starscache
 	gh stars -u Link- -f es6 -c /tmp/.starscache
-
-	# Print activity log
-	gh stars -u Link- -f es6 -V
 
 	# Enable debug mode
 	gh stars -u Link- -f es6 -d

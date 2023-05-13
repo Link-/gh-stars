@@ -11,7 +11,6 @@ import (
 	"testing"
 
 	"github.com/Link-/gh-stars/lib/pq"
-	"github.com/lithammer/fuzzysearch/fuzzy"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 )
@@ -33,7 +32,7 @@ func NewTestClient(fn RoundTripFunc) *http.Client {
 
 func setup(args []string) {
 	// Switch to true to see the InfoLogger output
-	debug = true
+	debug = false
 	rootCmd.PreRun(&cobra.Command{}, args)
 }
 
@@ -309,59 +308,68 @@ func TestSearch(t *testing.T) {
 func TestRender(t *testing.T) {
 	setup([]string{})
 
-	searchResults := make(pq.PriorityQueue, 0)
-	heap.Init(&searchResults)
-	for i := 0; i < 5; i++ {
-		heap.Push(&searchResults, &pq.Item{
-			Value: &Repo{
-				Name:        fmt.Sprintf("gatekeeper-%d", i),
-				Description: fmt.Sprintf("A gatekeeper-%d for your GitHub organization", i),
-				Url:         fmt.Sprintf("https://github.com/gatekeeper/gatekeeper-%d", i),
-			},
-			Priority: 1000 / (i + 1),
-		})
-	}
-
 	tests := []struct {
-		name    string
-		input   pq.PriorityQueue
-		limit   int
-		wantErr bool
-		want    interface{}
+		name          string
+		input         pq.PriorityQueue
+		inputOverride bool
+		limit         int
+		wantErr       bool
+		want          interface{}
 	}{
 		{
-			name:    "RenderEmptyPriorityQueue",
-			input:   make(pq.PriorityQueue, 0),
-			limit:   -1,
-			wantErr: false,
-			want:    "Name  URL  Description  Stars  Rank\n",
+			name:          "RenderEmptyPriorityQueue",
+			input:         make(pq.PriorityQueue, 0),
+			inputOverride: false,
+			limit:         -1,
+			wantErr:       false,
+			want:          "Name  URL  Description  Stars  Rank\n",
 		},
 		{
-			name:    "RenderPriorityQueueWithoutLimit",
-			input:   searchResults,
-			limit:   -1,
-			wantErr: false,
-			want:    "",
+			name:          "RenderPriorityQueueWithoutLimit",
+			input:         make(pq.PriorityQueue, 0),
+			inputOverride: true,
+			limit:         -1,
+			wantErr:       false,
+			want:          "Name  URL                                         Description                                  Stars  Rank\n      https://github.com/gatekeeper/gatekeeper-0  A gatekeeper-0 for your GitHub organization  0      1000\n      https://github.com/gatekeeper/gatekeeper-1  A gatekeeper-1 for your GitHub organization  0      500\n      https://github.com/gatekeeper/gatekeeper-2  A gatekeeper-2 for your GitHub organization  0      333\n      https://github.com/gatekeeper/gatekeeper-3  A gatekeeper-3 for your GitHub organization  0      250\n      https://github.com/gatekeeper/gatekeeper-4  A gatekeeper-4 for your GitHub organization  0      200\n",
 		},
 		{
-			name:    "RenderPriorityQueueWithLimitLessThanResults",
-			input:   searchResults,
-			limit:   3,
-			wantErr: false,
-			want:    "",
+			name:          "RenderPriorityQueueWithLimitLessThanResults",
+			input:         make(pq.PriorityQueue, 0),
+			inputOverride: true,
+			limit:         3,
+			wantErr:       false,
+			want:          "Name  URL                                         Description                                  Stars  Rank\n      https://github.com/gatekeeper/gatekeeper-0  A gatekeeper-0 for your GitHub organization  0      1000\n      https://github.com/gatekeeper/gatekeeper-1  A gatekeeper-1 for your GitHub organization  0      500\n      https://github.com/gatekeeper/gatekeeper-2  A gatekeeper-2 for your GitHub organization  0      333\n",
 		},
 		{
-			name:    "RenderPriorityQueueWithLimitHigherThanResults",
-			input:   searchResults,
-			limit:   10,
-			wantErr: false,
-			want:    "",
+			name:          "RenderPriorityQueueWithLimitHigherThanResults",
+			input:         make(pq.PriorityQueue, 0),
+			inputOverride: true,
+			limit:         10,
+			wantErr:       false,
+			want:          "Name  URL                                         Description                                  Stars  Rank\n      https://github.com/gatekeeper/gatekeeper-0  A gatekeeper-0 for your GitHub organization  0      1000\n      https://github.com/gatekeeper/gatekeeper-1  A gatekeeper-1 for your GitHub organization  0      500\n      https://github.com/gatekeeper/gatekeeper-2  A gatekeeper-2 for your GitHub organization  0      333\n      https://github.com/gatekeeper/gatekeeper-3  A gatekeeper-3 for your GitHub organization  0      250\n      https://github.com/gatekeeper/gatekeeper-4  A gatekeeper-4 for your GitHub organization  0      200\n",
 		},
 	}
 
 	// Run the tests
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+
+			if tt.inputOverride {
+				searchResults := make(pq.PriorityQueue, 0)
+				heap.Init(&searchResults)
+				for i := 0; i < 5; i++ {
+					heap.Push(&searchResults, &pq.Item{
+						Value: Repo{
+							Name:        fmt.Sprintf("gatekeeper-%d", i),
+							Description: fmt.Sprintf("A gatekeeper-%d for your GitHub organization", i),
+							Url:         fmt.Sprintf("https://github.com/gatekeeper/gatekeeper-%d", i),
+						},
+						Priority: 1000 / (i + 1),
+					})
+				}
+				tt.input = searchResults
+			}
+
 			var buf bytes.Buffer
 			err := Render(tt.input, tt.limit, &buf)
 			if tt.wantErr {
@@ -369,29 +377,7 @@ func TestRender(t *testing.T) {
 			} else {
 				assert.NoError(t, err)
 			}
-			fmt.Println(buf.String())
-			// assert.Equal(t, tt.want, buf.String())
+			assert.Equal(t, tt.want, buf.String())
 		})
 	}
-}
-
-func TestFuzzySearch(t *testing.T) {
-	t.Skip("Not needed")
-	sources := []string{"gateleeper", "gates", "gate", "g", "galeteeper", "gatekeepers"}
-	targets := []string{"gateleeper", "gates", "gate", "g", "galeteeper", "gatekeepers"}
-	for _, source := range sources {
-		for _, target := range targets {
-			fmt.Println(source, target, fuzzy.LevenshteinDistance(source, target))
-		}
-	}
-	// assert.Equal(t, 1, fuzzy.LevenshteinDistance(source, target))
-	// assert.Equal(t, false, fuzzy.Match(source, target))
-	// assert.Equal(t, 1, fuzzy.RankMatch(source, target))
-	// assert.Equal(t, 1, fuzzy.RankMatchNormalized(source, target))
-	// assert.Equal(t, 1, fuzzy.RankMatchNormalizedFold(source, target))
-	// assert.Equal(t, 1, len(fuzzy.Find(source, []string{target})))
-	// assert.Equal(t, 1, len(fuzzy.RankFindFold(source, []string{target})))
-	// assert.Equal(t, 1, len(fuzzy.RankFindNormalized(source, []string{target})))
-	// assert.Equal(t, 1, fuzzy.Find(source, []string{target}))
-	// fmt.Printf("%+v\n", fuzzy.RankFind("gateleeper", targets))
 }

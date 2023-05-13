@@ -123,7 +123,7 @@ func Render(results pq.PriorityQueue, limit int, renderTarget io.Writer) error {
 	// Render the results
 	InfoLogger.Println("Rendering the results")
 
-	if limit > results.Len() {
+	if results.Len() > limit {
 		InfoLogger.Printf("Results: %d are higher than the limit: %d \n", results.Len(), limit)
 	}
 
@@ -394,7 +394,7 @@ func init() {
 	//   -u, --user <handle>
 	//     Any GitHub handle. Example: link-
 	//   -c, --cache-file <file path>
-	//     File you want to store the cache file in. If not provided, the tool will generate one in $TMPDIR
+	//     File you want to store the cache in. File should exist and be writable. If not provided, the tool will generate one in $TMPDIR
 	//   -f, --find <keyword>
 	//     The keyword you want to search for. Example: es6
 	//   -l, --limit <number>
@@ -442,7 +442,7 @@ Flags:
 	-f, --find <keyword>         The keyword you want to search for, e.g. es6
 
 	Optional:
-	-c, --cache-file <file path> File you want to store the cache file in. If not provided, the tool will generate one in $TMPDIR
+	-c, --cache-file <file path> File you want to store the cache in. File should exist and be writable. If not provided, the tool will generate one in $TMPDIR
 	-l, --limit <number>         Limit the search results to the specified number, e.g. 10
 	-v, --version                Outputs release version
 	-d, --debug                  Outputs debugging log

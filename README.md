@@ -15,9 +15,7 @@ You know those repositories you like and star into the abyss? Yes those, this CL
 
 This tool will cache the results locally so that you don't risk abusing the API requests limit.
 
-```text
-TODO: Add demo gif
-```
+![Demo of how the extension works](./demo.gif)
 
 :warning: This project is still in `alpha` and the API might change without notice. Update only after reviewing the changelog for breaking changes.
 

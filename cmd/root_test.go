@@ -311,6 +311,7 @@ func TestRender(t *testing.T) {
 	tests := []struct {
 		name          string
 		input         pq.PriorityQueue
+		json          bool
 		inputOverride bool
 		limit         int
 		wantErr       bool
@@ -319,6 +320,7 @@ func TestRender(t *testing.T) {
 		{
 			name:          "RenderEmptyPriorityQueue",
 			input:         make(pq.PriorityQueue, 0),
+			json:          false,
 			inputOverride: false,
 			limit:         -1,
 			wantErr:       false,
@@ -327,6 +329,7 @@ func TestRender(t *testing.T) {
 		{
 			name:          "RenderPriorityQueueWithoutLimit",
 			input:         make(pq.PriorityQueue, 0),
+			json:          false,
 			inputOverride: true,
 			limit:         -1,
 			wantErr:       false,
@@ -335,6 +338,7 @@ func TestRender(t *testing.T) {
 		{
 			name:          "RenderPriorityQueueWithLimitLessThanResults",
 			input:         make(pq.PriorityQueue, 0),
+			json:          false,
 			inputOverride: true,
 			limit:         3,
 			wantErr:       false,
@@ -343,10 +347,20 @@ func TestRender(t *testing.T) {
 		{
 			name:          "RenderPriorityQueueWithLimitHigherThanResults",
 			input:         make(pq.PriorityQueue, 0),
+			json:          false,
 			inputOverride: true,
 			limit:         10,
 			wantErr:       false,
 			want:          "Name  URL                                         Description                                  Stars  Rank\n      https://github.com/gatekeeper/gatekeeper-0  A gatekeeper-0 for your GitHub organization  0      1000\n      https://github.com/gatekeeper/gatekeeper-1  A gatekeeper-1 for your GitHub organization  0      500\n      https://github.com/gatekeeper/gatekeeper-2  A gatekeeper-2 for your GitHub organization  0      333\n      https://github.com/gatekeeper/gatekeeper-3  A gatekeeper-3 for your GitHub organization  0      250\n      https://github.com/gatekeeper/gatekeeper-4  A gatekeeper-4 for your GitHub organization  0      200\n",
+		},
+		{
+			name:          "RenderPriorityQueueJsonOutput",
+			input:         make(pq.PriorityQueue, 0),
+			json:          true,
+			inputOverride: true,
+			limit:         -1,
+			wantErr:       false,
+			want:          `[{"name":"gatekeeper-0","full_name":"","private":false,"html_url":"https://github.com/gatekeeper/gatekeeper-0","Owner":{"login":"","url":""},"description":"A gatekeeper-0 for your GitHub organization","fork":false,"stargazers_count":0,"topics":null},{"name":"gatekeeper-1","full_name":"","private":false,"html_url":"https://github.com/gatekeeper/gatekeeper-1","Owner":{"login":"","url":""},"description":"A gatekeeper-1 for your GitHub organization","fork":false,"stargazers_count":0,"topics":null},{"name":"gatekeeper-2","full_name":"","private":false,"html_url":"https://github.com/gatekeeper/gatekeeper-2","Owner":{"login":"","url":""},"description":"A gatekeeper-2 for your GitHub organization","fork":false,"stargazers_count":0,"topics":null},{"name":"gatekeeper-3","full_name":"","private":false,"html_url":"https://github.com/gatekeeper/gatekeeper-3","Owner":{"login":"","url":""},"description":"A gatekeeper-3 for your GitHub organization","fork":false,"stargazers_count":0,"topics":null},{"name":"gatekeeper-4","full_name":"","private":false,"html_url":"https://github.com/gatekeeper/gatekeeper-4","Owner":{"login":"","url":""},"description":"A gatekeeper-4 for your GitHub organization","fork":false,"stargazers_count":0,"topics":null}]`,
 		},
 	}
 
@@ -369,6 +383,8 @@ func TestRender(t *testing.T) {
 				}
 				tt.input = searchResults
 			}
+
+			jsonOutput = tt.json
 
 			var buf bytes.Buffer
 			err := Render(tt.input, tt.limit, &buf)

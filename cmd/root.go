@@ -51,12 +51,13 @@ func (g *github) Exec(args ...string) (bytes.Buffer, bytes.Buffer, error) {
 }
 
 var (
-	user      string
-	find      string
-	cacheFile string
-	limit     int
-	version   bool
-	debug     bool
+	user       string
+	find       string
+	cacheFile  string
+	limit      int
+	version    bool
+	jsonOutput bool
+	debug      bool
 
 	ghClient    githubInterface
 	client      *http.Client
@@ -120,21 +121,24 @@ var rootCmd = &cobra.Command{
 }
 
 func Render(results pq.PriorityQueue, limit int, renderTarget io.Writer) error {
-	// Render the results
-	InfoLogger.Println("Rendering the results")
+	switch jsonOutput {
+	case true:
+		return RenderJsonOutput(results, limit, renderTarget)
+	default:
+		return RenderTable(results, limit, renderTarget)
+	}
+}
+
+func RenderTable(results pq.PriorityQueue, limit int, renderTarget io.Writer) error {
+	InfoLogger.Println("Rendering the results in table format")
 
 	if results.Len() > limit {
 		InfoLogger.Printf("Results: %d are higher than the limit: %d \n", results.Len(), limit)
 	}
 
-	var renderLimit int
-	if limit <= -1 {
-		renderLimit = results.Len()
-	} else {
-		renderLimit = int(math.Min(float64(limit), float64(results.Len())))
-	}
+	renderLimit := RenderLimit(results.Len(), limit)
 
-	tp := tableprinter.New(renderTarget, true, 300)
+	tp := tableprinter.New(renderTarget, true, 350)
 	headerRow := []string{"Name", "URL", "Description", "Stars", "Rank"}
 	for _, item := range headerRow {
 		tp.AddField(item)
@@ -154,6 +158,42 @@ func Render(results pq.PriorityQueue, limit int, renderTarget io.Writer) error {
 		return err
 	}
 	return nil
+}
+
+// RenderJsonOutput renders the results in JSON format
+func RenderJsonOutput(results pq.PriorityQueue, limit int, renderTarget io.Writer) error {
+	InfoLogger.Println("Rendering the results in JSON format")
+
+	if results.Len() > limit {
+		InfoLogger.Printf("Results: %d are higher than the limit: %d \n", results.Len(), limit)
+	}
+
+	renderLimit := RenderLimit(results.Len(), limit)
+
+	var repos []Repo
+	for i := 0; i < renderLimit; i++ {
+		item := heap.Pop(&results).(*pq.Item)
+		repos = append(repos, item.Value.(Repo))
+	}
+
+	jsonOutput, err := json.Marshal(repos)
+	if err != nil {
+		return err
+	}
+
+	fmt.Fprintf(renderTarget, "%s", jsonOutput)
+	return nil
+}
+
+// RenderLimit returns the limit to be used for rendering the results
+// If the limit is -1, then return the total number of results
+// Otherwise return the minimum of the limit and the total number of results
+func RenderLimit(resultsCount int, limit int) int {
+	if limit <= -1 {
+		return resultsCount
+	} else {
+		return int(math.Min(float64(limit), float64(resultsCount)))
+	}
 }
 
 // Find the search term in the starred repos
@@ -408,6 +448,7 @@ func init() {
 	rootCmd.Flags().StringVarP(&cacheFile, "cache-file", "c", "", "File you want to store the cache file in. If not provided, the tool will generate one in $TMPDIR")
 	rootCmd.Flags().IntVarP(&limit, "limit", "l", 10, "Limit the search results to the specified number, default: 10")
 	rootCmd.Flags().BoolVarP(&version, "version", "v", false, "Print current version")
+	rootCmd.Flags().BoolVarP(&jsonOutput, "json", "j", false, "Prints the output in JSON format, default: false")
 	rootCmd.Flags().BoolVarP(&debug, "debug", "d", false, "Enables debug mode, default: false")
 	rootCmd.SetHelpTemplate(getRootHelp())
 }
@@ -445,6 +486,7 @@ Flags:
 	-c, --cache-file <file path> File you want to store the cache in. File should exist and be writable. If not provided, the tool will generate one in $TMPDIR
 	-l, --limit <number>         Limit the search results to the specified number, e.g. 10
 	-v, --version                Outputs release version
+	-j, --json				     Outputs the results in JSON format
 	-d, --debug                  Outputs debugging log
 
 Examples:

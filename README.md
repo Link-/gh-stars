@@ -143,4 +143,4 @@ Found a problem? [Open an issue](https://github.com/Link-/gh-stars/issues/new).
 
 I've live streamed the entire process of building this tool:
 
-[![Watch the walkthrough](https://img.youtube.com/vi/sXa6UI8xyRg/hqdefault.jpg)](https://youtu.be/wQ0k5k6KW5Y)
+[![Watch the walkthrough](https://img.youtube.com/vi/sXa6UI8xyRg/hqdefault.jpg)](https://youtube.com/playlist?list=PLArH6NjfKsUgST7vRnQYwNzwc2fpDD7Vu)

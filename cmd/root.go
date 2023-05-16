@@ -439,6 +439,8 @@ func init() {
 	//     The keyword you want to search for. Example: es6
 	//   -l, --limit <number>
 	//     Limit the search results to the specified number. Default is 10
+	//   -j, --json
+	//     Prints the output in JSON format
 	//   -v, --version
 	//     Print current version
 	//   -d, --debug
@@ -485,8 +487,8 @@ Flags:
 	Optional:
 	-c, --cache-file <file path> File you want to store the cache in. File should exist and be writable. If not provided, the tool will generate one in $TMPDIR
 	-l, --limit <number>         Limit the search results to the specified number, e.g. 10
-	-v, --version                Outputs release version
 	-j, --json				     Outputs the results in JSON format
+	-v, --version                Outputs release version
 	-d, --debug                  Outputs debugging log
 
 Examples:
@@ -502,6 +504,9 @@ Examples:
 
 	# Enable debug mode
 	gh stars -u Link- -f es6 -d
+
+	# Print the results in JSON format
+	gh stars -u Link- -f es6 -j
 
 	# Print current version
 	gh stars -v

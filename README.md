@@ -50,6 +50,9 @@ Options:
   -l, --limit <number>
     Limit the search results to the specified number. Default is 10
 
+  -j, --json
+    Prints the output in JSON format
+
   -v, --version
     Outputs release version
 
@@ -133,6 +136,25 @@ mckaywrigley/chatbot-ui   https://github.com/mckaywrigley/chatbot-ui   An open s
 andyfeller/gh-montage     https://github.com/andyfeller/gh-montage     GitHub CLI extension to generate montage from GitHub user avatars                                   28     1000
 actions/gh-actions-cache  https://github.com/actions/gh-actions-cache  A GitHub (gh) CLI extension to manage the GitHub Actions caches being used in a GitHub repository.  219    1000
 nadrad/h-m-m              https://github.com/nadrad/h-m-m              Hackers Mind Map                                                                                    1628   1000
+```
+
+#### JSON output
+
+```sh
+gh stars -u 'link-' -f 'rust server' --json | jq -r '.[].html_url'
+```
+
+```text
+https://github.com/google/comprehensive-rust
+https://github.com/TheAlgorithms/Rust
+https://github.com/mattermost/mattermost-server
+https://github.com/google/seesaw
+https://github.com/gm3dmo/the-power
+https://github.com/firecracker-microvm/firecracker
+https://github.com/caddyserver/caddy
+https://github.com/caddyserver/caddy
+https://github.com/simskij/awesome-software-architecture
+https://github.com/binwiederhier/ntfy
 ```
 
 ## Troubleshoot

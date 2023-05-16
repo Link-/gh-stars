@@ -138,3 +138,9 @@ nadrad/h-m-m              https://github.com/nadrad/h-m-m              Hackers M
 ## Troubleshoot
 
 Found a problem? [Open an issue](https://github.com/Link-/gh-stars/issues/new).
+
+## How it's made?
+
+I've live streamed the entire process of building this tool:
+
+[![Watch the walkthrough](https://img.youtube.com/vi/sXa6UI8xyRg/hqdefault.jpg)](https://youtu.be/wQ0k5k6KW5Y)

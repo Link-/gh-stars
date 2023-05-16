@@ -136,8 +136,8 @@ func Render(results pq.PriorityQueue, limit int, renderTarget io.Writer) error {
 
 	tp := tableprinter.New(renderTarget, true, 300)
 	headerRow := []string{"Name", "URL", "Description", "Stars", "Rank"}
-	for _, header := range headerRow {
-		tp.AddField(header)
+	for _, item := range headerRow {
+		tp.AddField(item)
 	}
 	tp.EndRow()
 	for i := 0; i < renderLimit; i++ {

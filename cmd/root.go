@@ -18,6 +18,7 @@ import (
 	"github.com/Link-/gh-stars/lib/pq"
 	"github.com/cli/go-gh"
 	"github.com/cli/go-gh/pkg/tableprinter"
+	"github.com/gookit/color"
 	"github.com/lithammer/fuzzysearch/fuzzy"
 	"github.com/spf13/cobra"
 )
@@ -146,11 +147,20 @@ func RenderTable(results pq.PriorityQueue, limit int, renderTarget io.Writer) er
 	tp.EndRow()
 	for i := 0; i < renderLimit; i++ {
 		item := heap.Pop(&results).(*pq.Item)
-		tp.AddField(item.Value.(Repo).Full_name)
-		tp.AddField(item.Value.(Repo).Url)
-		tp.AddField(item.Value.(Repo).Description)
-		tp.AddField(fmt.Sprintf("%d", item.Value.(Repo).Stars))
-		tp.AddField(fmt.Sprintf("%d", item.Priority))
+		repo := item.Value.(Repo)
+
+		// Color formatting for specific fields
+        name := color.FgCyan.Sprintf(repo.Full_name)
+        url := color.FgYellow.Sprintf(repo.Url)
+        description := color.FgLightCyan.Sprintf(repo.Description)
+        stars := color.FgLightYellow.Sprintf("%d", repo.Stars)
+        rank := color.FgLightGreen.Sprintf("%d", item.Priority)
+
+		tp.AddField(name)
+		tp.AddField(url)
+		tp.AddField(description)
+		tp.AddField(stars)
+		tp.AddField(rank)
 		tp.EndRow()
 	}
 	err := tp.Render()

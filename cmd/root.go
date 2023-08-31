@@ -283,7 +283,7 @@ func Search(starredRepos bytes.Buffer, find string) (pq.PriorityQueue, error) {
 // implementation.
 func GenerateCacheKey(user string) ([32]byte, error) {
 	if user == "" {
-		return [32]byte{}, fmt.Errorf("user cannot be empty, the implementation is faulty.")
+		return [32]byte{}, fmt.Errorf("user cannot be empty, the implementation is faulty")
 	}
 
 	InfoLogger.Println("Attempting to fetch the total number of starred repos for user", user)
@@ -305,13 +305,13 @@ func GenerateCacheKey(user string) ([32]byte, error) {
 
 	switch resp.StatusCode {
 	case http.StatusForbidden:
-		return [32]byte{}, fmt.Errorf("API rate limit reached. Used: %v, Remaining: %v, Reset Time: %v", resp.Header.Get("X-RateLimit-Used"), resp.Header.Get("X-RateLimit-Remaining"), resp.Header.Get("X-RateLimit-Reset"))
+		return [32]byte{}, fmt.Errorf("api rate limit reached. used: %v, remaining: %v, reset time: %v", resp.Header.Get("X-RateLimit-Used"), resp.Header.Get("X-RateLimit-Remaining"), resp.Header.Get("X-RateLimit-Reset"))
 	case http.StatusNotFound:
-		return [32]byte{}, fmt.Errorf("User not found or you're not authorized to access this data.")
+		return [32]byte{}, fmt.Errorf("user not found or you're not authorized to access this data")
 	case http.StatusOK:
 		break
 	default:
-		return [32]byte{}, fmt.Errorf("Unexpected HTTP status code: %d", resp.StatusCode)
+		return [32]byte{}, fmt.Errorf("unexpected http status code: %d", resp.StatusCode)
 	}
 
 	header := resp.Header.Get("Link")
@@ -334,7 +334,7 @@ func GetCachePath(cacheKey [32]byte) (string, error) {
 	}
 
 	if cacheKey == [32]byte{} {
-		return "", fmt.Errorf("cacheKey cannot be empty, the implementation is faulty.")
+		return "", fmt.Errorf("cachekey cannot be empty, the implementation is faulty")
 	}
 
 	// cacheFile format: <tmpdir>/stars_2d06a89b2687.json

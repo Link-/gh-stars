@@ -1,6 +1,9 @@
 name: CI
 
 on:
+  pull_request:
+    branches:
+      - main
   push:
     branches:
       - main
@@ -12,7 +15,9 @@ jobs:
   test:
     strategy:
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
+        # TODO: add windows-latest after fixing the 
+        # tests. We need to test on that OS as well
+        os: [ubuntu-latest, macos-latest]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v3

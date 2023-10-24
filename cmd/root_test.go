@@ -3,11 +3,14 @@ package cmd
 import (
 	"bytes"
 	"container/heap"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
 	"path/filepath"
+	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/Link-/gh-stars/lib/pq"
@@ -388,12 +391,44 @@ func TestRender(t *testing.T) {
 
 			var buf bytes.Buffer
 			err := Render(tt.input, tt.limit, &buf)
-			if tt.wantErr {
-				assert.Error(t, err)
+
+			if tt.json {
+				if !areJSONStringsEqual(tt.want.(string), buf.String()) {
+					t.Errorf("JSON output does not match the expected JSON")
+				}
 			} else {
-				assert.NoError(t, err)
+				if tt.wantErr {
+					assert.Error(t, err)
+				} else {
+					assert.NoError(t, err)
+				}
+				assert.Equal(t, tt.want, buf.String())
 			}
-			assert.Equal(t, tt.want, buf.String())
 		})
 	}
+}
+
+func areJSONStringsEqual(jsonStr1, jsonStr2 string) bool {
+	var data1 interface{}
+	var data2 interface{}
+
+	if err := json.NewDecoder(strings.NewReader(jsonStr1)).Decode(&data1); err != nil {
+		return false
+	}
+
+	if err := json.NewDecoder(strings.NewReader(jsonStr2)).Decode(&data2); err != nil {
+		return false
+	}
+
+	standardizedJSON1, err := json.Marshal(data1)
+	if err != nil {
+		return false
+	}
+
+	standardizedJSON2, err := json.Marshal(data2)
+	if err != nil {
+		return false
+	}
+
+	return reflect.DeepEqual(standardizedJSON1, standardizedJSON2)
 }

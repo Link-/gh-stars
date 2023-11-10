@@ -3,11 +3,13 @@ package cmd
 import (
 	"bytes"
 	"container/heap"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 
 	"github.com/Link-/gh-stars/lib/pq"
@@ -388,12 +390,34 @@ func TestRender(t *testing.T) {
 
 			var buf bytes.Buffer
 			err := Render(tt.input, tt.limit, &buf)
-			if tt.wantErr {
-				assert.Error(t, err)
+
+			if tt.json {
+				if !areJSONStringsEqual(tt.want.(string), buf.String()) {
+					t.Errorf("JSON output does not match the expected JSON")
+				}
 			} else {
-				assert.NoError(t, err)
+				if tt.wantErr {
+					assert.Error(t, err)
+				} else {
+					assert.NoError(t, err)
+				}
+				assert.Equal(t, tt.want, buf.String())
 			}
-			assert.Equal(t, tt.want, buf.String())
 		})
 	}
+}
+
+func areJSONStringsEqual(a, b string) bool {
+	var x interface{}
+	var y interface{}
+
+	if err := json.Unmarshal([]byte(a), &x); err != nil {
+		return false
+	}
+
+	if err := json.Unmarshal([]byte(b), &y); err != nil {
+		return false
+	}
+
+	return reflect.DeepEqual(x, y)
 }

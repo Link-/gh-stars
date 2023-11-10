@@ -10,7 +10,6 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
-	"strings"
 	"testing"
 
 	"github.com/Link-/gh-stars/lib/pq"
@@ -408,27 +407,17 @@ func TestRender(t *testing.T) {
 	}
 }
 
-func areJSONStringsEqual(jsonStr1, jsonStr2 string) bool {
-	var data1 interface{}
-	var data2 interface{}
+func areJSONStringsEqual(a, b string) bool {
+	var x interface{}
+	var y interface{}
 
-	if err := json.NewDecoder(strings.NewReader(jsonStr1)).Decode(&data1); err != nil {
+	if err := json.Unmarshal([]byte(a), &x); err != nil {
 		return false
 	}
 
-	if err := json.NewDecoder(strings.NewReader(jsonStr2)).Decode(&data2); err != nil {
+	if err := json.Unmarshal([]byte(b), &y); err != nil {
 		return false
 	}
 
-	standardizedJSON1, err := json.Marshal(data1)
-	if err != nil {
-		return false
-	}
-
-	standardizedJSON2, err := json.Marshal(data2)
-	if err != nil {
-		return false
-	}
-
-	return reflect.DeepEqual(standardizedJSON1, standardizedJSON2)
+	return reflect.DeepEqual(x, y)
 }

@@ -440,6 +440,8 @@ func init() {
 	//     The keyword you want to search for. Example: es6
 	//   -l, --limit <number>
 	//     Limit the search results to the specified number. Default is 10
+	//	 -w, --table-max-width <number>
+	//	   The maximum width of the table that displays results if in table mode, default: 350
 	//   -j, --json
 	//     Prints the output in JSON format
 	//   -v, --version
@@ -487,11 +489,12 @@ Flags:
 	-f, --find <keyword>         The keyword you want to search for, e.g. es6
 
 	Optional:
-	-c, --cache-file <file path> File you want to store the cache in. File should exist and be writable. If not provided, the tool will generate one in $TMPDIR
-	-l, --limit <number>         Limit the search results to the specified number, e.g. 10
-	-j, --json				     Outputs the results in JSON format
-	-v, --version                Outputs release version
-	-d, --debug                  Outputs debugging log
+	-c, --cache-file <file path> 	File you want to store the cache in. File should exist and be writable. If not provided, the tool will generate one in $TMPDIR
+	-l, --limit <number>         	Limit the search results to the specified number, e.g. 10
+	-w, --table-max-width <number>  The maximum width of the table that displays results if in table mode, default: 350
+	-j, --json                      Outputs the results in JSON format
+	-v, --version                	Outputs release version
+	-d, --debug                  	Outputs debugging log
 
 Examples:
 

@@ -51,13 +51,14 @@ func (g *github) Exec(args ...string) (bytes.Buffer, bytes.Buffer, error) {
 }
 
 var (
-	user       string
-	find       string
-	cacheFile  string
-	limit      int
-	version    bool
-	jsonOutput bool
-	debug      bool
+	user          string
+	find          string
+	cacheFile     string
+	limit         int
+	tableMaxWidth int
+	version       bool
+	jsonOutput    bool
+	debug         bool
 
 	ghClient    githubInterface
 	client      *http.Client
@@ -138,7 +139,7 @@ func RenderTable(results pq.PriorityQueue, limit int, renderTarget io.Writer) er
 
 	renderLimit := RenderLimit(results.Len(), limit)
 
-	tp := tableprinter.New(renderTarget, true, 350)
+	tp := tableprinter.New(renderTarget, true, tableMaxWidth)
 	headerRow := []string{"Name", "URL", "Description", "Stars", "Rank"}
 	for _, item := range headerRow {
 		tp.AddField(item)
@@ -449,6 +450,7 @@ func init() {
 	rootCmd.Flags().StringVarP(&find, "find", "f", "", "The keyword you want to search for (required)")
 	rootCmd.Flags().StringVarP(&cacheFile, "cache-file", "c", "", "File you want to store the cache file in. If not provided, the tool will generate one in $TMPDIR")
 	rootCmd.Flags().IntVarP(&limit, "limit", "l", 10, "Limit the search results to the specified number, default: 10")
+	rootCmd.Flags().IntVarP(&tableMaxWidth, "table-max-width", "w", 350, "The maximum width of the table that displays results if in table mode, default: 350")
 	rootCmd.Flags().BoolVarP(&version, "version", "v", false, "Print current version")
 	rootCmd.Flags().BoolVarP(&jsonOutput, "json", "j", false, "Prints the output in JSON format, default: false")
 	rootCmd.Flags().BoolVarP(&debug, "debug", "d", false, "Enables debug mode, default: false")

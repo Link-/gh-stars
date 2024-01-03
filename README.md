@@ -19,6 +19,8 @@ This tool will cache the results locally so that you don't risk abusing the API 
 
 :warning: This project is still in `alpha` and the API might change without notice. Update only after reviewing the changelog for breaking changes.
 
+### For a more reliable search experience please use: https://github.com/Link-/starred_search
+
 ## Installation
 
 ### Setup

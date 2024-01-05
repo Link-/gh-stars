@@ -18,7 +18,6 @@ import (
 	"github.com/Link-/gh-stars/lib/pq"
 	"github.com/cli/go-gh"
 	"github.com/cli/go-gh/pkg/tableprinter"
-	"github.com/lithammer/fuzzysearch/fuzzy"
 	"github.com/spf13/cobra"
 )
 
@@ -204,56 +203,38 @@ func Search(starredRepos bytes.Buffer, find string) (pq.PriorityQueue, error) {
 	heap.Init(&found)
 
 	var repos []Repo
-	needles := strings.Fields(find)
 	err := json.Unmarshal(starredRepos.Bytes(), &repos)
 	if err != nil {
 		return nil, err
 	}
 
 	for _, repo := range repos {
-		for _, needle := range needles {
-			// Handle the repository name
-			// Split the repository on - and _
-			repoNameWords := strings.FieldsFunc(repo.Name, func(r rune) bool {
-				return r == '-' || r == '_'
+		if strings.Contains(strings.ToLower(repo.Name), strings.ToLower(find)) {
+			heap.Push(&found, &pq.Item{
+				Value:    repo,
+				Priority: 1000,
 			})
-			match := false
-			for _, word := range repoNameWords {
-				rank := fuzzy.LevenshteinDistance(needle, word)
-				if rank >= 0 && rank <= MAX_FUZZY_DISTANCE {
-					heap.Push(&found, &pq.Item{
-						Value:    repo,
-						Priority: (rank/(rank+1) + 10) * 100,
-					})
-					match = true
-					break
-				}
+			continue
+		}
+		var match bool
+		for _, topic := range repo.Topics {
+			if strings.Contains(strings.ToLower(topic), strings.ToLower(find)) {
+				heap.Push(&found, &pq.Item{
+					Value:    repo,
+					Priority: 500,
+				})
+				match = true
+				break
 			}
-			if match {
-				continue
-			}
-			// Handle the repository description
-			descriptionWords := strings.Fields(repo.Description)
-			for _, word := range descriptionWords {
-				rank := fuzzy.LevenshteinDistance(needle, word)
-				if rank >= 0 && rank <= MAX_FUZZY_DISTANCE {
-					heap.Push(&found, &pq.Item{
-						Value:    repo,
-						Priority: (rank/(rank+1) + 5) * 50,
-					})
-				}
-				continue
-			}
-			// Handle the topics
-			for _, topic := range repo.Topics {
-				rank := fuzzy.LevenshteinDistance(needle, topic)
-				if rank >= 0 && rank <= MAX_FUZZY_DISTANCE {
-					heap.Push(&found, &pq.Item{
-						Value:    repo,
-						Priority: (rank/(rank+1) + 1) * 25,
-					})
-				}
-			}
+		}
+		if match {
+			continue
+		}
+		if strings.Contains(strings.ToLower(repo.Description), strings.ToLower(find)) {
+			heap.Push(&found, &pq.Item{
+				Value:    repo,
+				Priority: 250,
+			})
 		}
 	}
 

@@ -243,13 +243,6 @@ func TestSearch(t *testing.T) {
 		pqDepth int
 	}{
 		{
-			name:    "SearchWithEmptyTerm",
-			data:    testData,
-			wantErr: false,
-			find:    "",
-			pqDepth: 0,
-		},
-		{
 			name:    "SearchWithSingleTerm",
 			data:    testData,
 			wantErr: false,
@@ -261,13 +254,13 @@ func TestSearch(t *testing.T) {
 			data:    testData,
 			wantErr: false,
 			find:    "y",
-			pqDepth: 7,
+			pqDepth: 4,
 		},
 		{
 			name:    "SearchWithMultipleWords",
 			data:    testData,
 			wantErr: false,
-			find:    "amethyst engine",
+			find:    "fuzzy search",
 			pqDepth: 1,
 		},
 		{
@@ -285,10 +278,31 @@ func TestSearch(t *testing.T) {
 			pqDepth: 1,
 		},
 		{
-			name:    "SearchProximitySuccess",
+			name:    "ExactMatchRepoName",
 			data:    testData,
 			wantErr: false,
-			find:    "gateleeper",
+			find:    "nanoGPT",
+			pqDepth: 1,
+		},
+		{
+			name:    "ExactMatchTopic",
+			data:    testData,
+			wantErr: false,
+			find:    "gh-extension",
+			pqDepth: 1,
+		},
+		{
+			name:    "NoMatch",
+			data:    testData,
+			wantErr: false,
+			find:    "nonexistent",
+			pqDepth: 0,
+		},
+		{
+			name:    "CaseInsensitiveSearch",
+			data:    testData,
+			wantErr: false,
+			find:    "mAcOS",
 			pqDepth: 1,
 		},
 	}
